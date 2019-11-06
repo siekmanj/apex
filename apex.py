@@ -11,20 +11,7 @@ class color:
 
 
 def print_logo(subtitle="", option=2):
-  print()
-  print(color.BOLD + color.ORANGE +  "         .8.         " + color.BLACK + " 8 888888888o   " + color.ORANGE + "8 8888888888   `8.`8888.      ,8' ")
-  print(color.BOLD + color.ORANGE +  "        .888.        " + color.BLACK + " 8 8888    `88. " + color.ORANGE + "8 8888          `8.`8888.    ,8' ")
-  print(color.BOLD + color.ORANGE +  "       :88888.       " + color.BLACK + " 8 8888     `88 " + color.ORANGE + "8 8888           `8.`8888.  ,8' ")
-  print(color.BOLD + color.ORANGE +  "      . `88888.      " + color.BLACK + " 8 8888     ,88 " + color.ORANGE + "8 8888            `8.`8888.,8' ")
-  print(color.BOLD + color.ORANGE +  "     .8. `88888.     " + color.BLACK + " 8 8888.   ,88' " + color.ORANGE + "8 888888888888     `8.`88888' ")
-  print(color.BOLD + color.ORANGE + "    .8`8. `88888.    " + color.BLACK  + " 8 888888888P'  " + color.ORANGE + "8 8888             .88.`8888. ")
-  print(color.BOLD + color.ORANGE + "   .8' `8. `88888.   " + color.BLACK  + " 8 8888         " + color.ORANGE + "8 8888            .8'`8.`8888. ")
-  print(color.BOLD + color.ORANGE + "  .8'   `8. `88888.  " + color.BLACK  + " 8 8888         " + color.ORANGE + "8 8888           .8'  `8.`8888. ")
-  print(color.BOLD + color.ORANGE + " .888888888. `88888. " + color.BLACK  + " 8 8888         " + color.ORANGE + "8 8888          .8'    `8.`8888. ")
-  print(color.BOLD + color.ORANGE + ".8'       `8. `88888." + color.BLACK  + " 8 8888         " + color.ORANGE + "8 888888888888 .8'      `8.`8888. " + color.END)
-  print("\n")
-  print(subtitle)
-  print("\n")
+  pass
 
 def env_factory(path, state_est=True, mirror=False, **kwargs):
     from functools import partial
@@ -49,6 +36,7 @@ def env_factory(path, state_est=True, mirror=False, **kwargs):
       elif path == 'CassieRandomDynamics-v0':
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
 
+      """
       if mirror:
           from rl.envs.wrappers import SymmetricEnv
           if state_est:
@@ -61,6 +49,7 @@ def env_factory(path, state_est=True, mirror=False, **kwargs):
                                               -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
                                               mirrored_act = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
 
+      """
       return env_fn
 
     spec = gym.envs.registry.spec(path)
@@ -238,47 +227,10 @@ if __name__ == "__main__":
 
     run_experiment(args)
 
-  elif sys.argv[1] == 'td3_sync':
+  elif sys.argv[1] == 'td3':
     sys.argv.remove(sys.argv[1])
     """
       Utility for running Twin-Delayed Deep Deterministic policy gradients.
-
-    """
-    from rl.algos.sync_td3 import run_experiment
-    parser.add_argument("--logdir",       default="./logs/syncTD3/experiments/", type=str)
-    parser.add_argument("--policy_name", default="TD3")					            # Policy name
-    parser.add_argument("--num_procs", type=int, default=4)                         # neurons in hidden layer
-    parser.add_argument("--min_steps", type=int, default=1000)                      # number of steps of experience each process should collect
-    parser.add_argument("--max_traj_len", type=int, default=400)                    # max steps in each episode
-    parser.add_argument("--env_name", default="Cassie-mimic-v0")                    # environment name
-    parser.add_argument("--hidden_size", default=256)                               # neurons in hidden layer
-    parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
-    parser.add_argument("--mirror", default=False, action='store_true')             # mirror actions or not
-    parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
-    parser.add_argument("--seed", default=0, type=int)                              # Sets Gym, PyTorch and Numpy seeds
-    parser.add_argument("--start_timesteps", default=1e4, type=int)                 # How many time steps purely random policy is run for
-    parser.add_argument("--eval_freq", default=5e3, type=float)                     # How often (time steps) we evaluate
-    parser.add_argument("--max_timesteps", default=1e7, type=float)                 # Max time steps to run environment for
-    parser.add_argument("--save_models", default=True, action="store_true")         # Whether or not models are saved
-    parser.add_argument("--act_noise", default=0.3, type=float)                     # Std of Gaussian exploration noise (used to be 0.1)
-    parser.add_argument('--param_noise', type=bool, default=False)                  # param noise
-    parser.add_argument('--noise_scale', type=float, default=0.3, metavar='G')      # initial scale of noise for param noise
-    parser.add_argument("--batch_size", default=100, type=int)                      # Batch size for both actor and critic
-    parser.add_argument("--discount", default=0.99, type=float)                     # Discount factor
-    parser.add_argument("--tau", default=0.001, type=float)                         # Target network update rate
-    parser.add_argument("--a_lr", type=float, default=3e-4)                         # Actor: Adam learning rate
-    parser.add_argument("--c_lr", type=float, default=1e-3)                         # Critic: Adam learning rate
-    # TD3 Specific
-    parser.add_argument("--policy_noise", default=0.2, type=float)                  # Noise added to target policy during critic update
-    parser.add_argument("--noise_clip", default=0.5, type=float)                    # Range to clip target policy noise
-    parser.add_argument("--policy_freq", default=2, type=int)                       # Frequency of delayed policy updates
-    args = parser.parse_args()
-
-    run_experiment(args)
-  elif sys.argv[1] == 'td3_async':
-    sys.argv.remove(sys.argv[1])
-    """
-      Utility for running Twin-Delayed Deep Deterministic policy gradients (asynchronous).
 
     """
     raise NotImplementedError
@@ -288,46 +240,7 @@ if __name__ == "__main__":
       Utility for running Proximal Policy Optimization.
 
     """
-    from rl.algos.mirror_ppo import run_experiment
-
-    # Arguments
-    parser = argparse.ArgumentParser()
-
-    # For tensorboard logger
-    parser.add_argument("--logdir", type=str, default="./logs/ppo/experiments/")       # Where to log diagnostics to
-    parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
-    parser.add_argument("--previous", type=str, default=None)                  # path to directory of previous policies for resuming training
-    parser.add_argument("--seed", default=0, type=int)                                 # Sets Gym, PyTorch and Numpy seeds
-    parser.add_argument("--policy_name", type=str, default="PPO")
-    parser.add_argument("--env_name", "-e",   default="Cassie-mimic-v0")
-    # parser.add_argument("--env", type=str, default="Cassie-mimic-v0")
-    parser.add_argument("--state_est", type=bool, default=True)
-    # mirror actions or not
-    parser.add_argument("--mirror", default=False, action='store_true')
-    # visdom server port
-    parser.add_argument("--viz_port", default=8097)
-    # PPO algo args
-    parser.add_argument("--input_norm_steps", type=int, default=10000)
-    parser.add_argument("--n_itr", type=int, default=10000, help="Number of iterations of the learning algorithm")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Adam learning rate") # Xie
-    parser.add_argument("--eps", type=float, default=1e-5, help="Adam epsilon (for numerical stability)")
-    parser.add_argument("--lam", type=float, default=0.95, help="Generalized advantage estimate discount")
-    parser.add_argument("--gamma", type=float, default=0.99, help="MDP discount")
-    parser.add_argument("--entropy_coeff", type=float, default=0.0, help="Coefficient for entropy regularization")
-    parser.add_argument("--clip", type=float, default=0.2, help="Clipping parameter for PPO surrogate loss")
-    parser.add_argument("--minibatch_size", type=int, default=64, help="Batch size for PPO updates")
-    parser.add_argument("--epochs", type=int, default=3, help="Number of optimization epochs per PPO update") #Xie
-    parser.add_argument("--num_steps", type=int, default=5096, help="Number of sampled timesteps per gradient estimate")
-    parser.add_argument("--use_gae", type=bool, default=True,help="Whether or not to calculate returns using Generalized Advantage Estimation")
-    parser.add_argument("--num_procs", type=int, default=30, help="Number of threads to train on")
-    parser.add_argument("--max_grad_norm", type=float, default=0.05, help="Value to clip gradients at.")
-    parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode horizon")
-
-    parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
-
-    args = parser.parse_args()
-    args.num_steps = args.num_steps // args.num_procs
-    run_experiment(args)
+    raise NotImplementedError
 
   elif sys.argv[1] == 'eval':
     sys.argv.remove(sys.argv[1])

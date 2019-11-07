@@ -250,7 +250,10 @@ def run_experiment(args):
 
     timesteps += samples
     avg_reward += iter_reward
-    secs_per_sample = 1000 * elapsed / samples
+    if samples > 0:
+      secs_per_sample = 1000 * elapsed / samples
+    else:
+      secs_per_sample = 0
     print(("iter {:4d} | "
            "ret {:6.2f} | "
            "last {:3d} iters: {:6.2f} | "
@@ -262,6 +265,6 @@ def run_experiment(args):
             end="\r")
     i += 1
 
-    logger.add_scalar(args.env_name + ' eval timestep', eval_reward, timesteps)
-    logger.add_scalar(args.env_name + ' eval episode', eval_reward, i)
+    logger.add_scalar(args.env_name + ' eval timestep', iter_reward, timesteps)
+    logger.add_scalar(args.env_name + ' eval episode', iter_reward, i)
     torch.save(algo.policy, args.save_model)

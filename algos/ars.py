@@ -262,5 +262,6 @@ def run_experiment(args):
             end="\r")
     i += 1
 
-    logger.add_scalar('eval', iter_reward, timesteps)
+    logger.add_scalar(args.env_name + ' eval timestep', eval_reward, timesteps)
+    logger.add_scalar(args.env_name + ' eval episode', eval_reward, i)
     torch.save(algo.policy, args.save_model)

@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from rl.distributions import DiagonalGaussian
-
 from torch import sqrt
 
 # The base class for an actor. Includes functions for normalizing state (optional)

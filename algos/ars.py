@@ -3,7 +3,7 @@ import torch
 import ray
 import time
 
-from apex import env_factory, create_logger
+from rrl import env_factory, create_logger
 
 # This function adapted from https://github.com/modestyachts/ARS/blob/master/code/shared_noise.py
 # (Thanks to Horia Mania)
@@ -156,6 +156,7 @@ class ARS:
     return timesteps
 
 def run_experiment(args):
+  import os
 
   # wrapper function for creating parallelized envs
   env_thunk = env_factory(args.env_name)
@@ -165,7 +166,7 @@ def run_experiment(args):
 
   # wrapper function for creating parallelized policies
   def policy_thunk():
-    from rl.policies.actor import FF_Actor, LSTM_Actor, Linear_Actor
+    from policies.actor import FF_Actor, LSTM_Actor, Linear_Actor
     if args.load_model is not None:
       return torch.load(args.load_model)
     else:
@@ -228,6 +229,9 @@ def run_experiment(args):
   i = 0
 
   logger = create_logger(args)
+
+  if args.save_model is None:
+    args.save_model = os.path.join(logger.dir, 'actor.pt')
 
   env = env_thunk()
   while timesteps < args.timesteps:

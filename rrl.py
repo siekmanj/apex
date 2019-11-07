@@ -145,7 +145,7 @@ def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
     print("Eval reward: ", eval_reward)
 
 if __name__ == "__main__":
-  import sys, argparse, time
+  import sys, argparse, time, os
   parser = argparse.ArgumentParser()
 
   print_logo(subtitle="Maintained by Oregon State University's Dynamic Robotics Lab")
@@ -158,7 +158,7 @@ if __name__ == "__main__":
       Utility for running Augmented Random Search.
 
     """
-    from rl.algos.ars import run_experiment
+    from algos.ars import run_experiment
     sys.argv.remove(sys.argv[1])
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--hidden_size",          default=32, type=int)                 # neurons in hidden layer
@@ -178,9 +178,6 @@ if __name__ == "__main__":
     parser.add_argument("--save_model",   "-m",   default=None, type=str)               # where to save the trained model to
     parser.add_argument("--redis",                default=None)
     args = parser.parse_args()
-    if args.save_model == None:
-      args.save_model = './trained_models/ars/' + args.env_name + '.pt'
-
     run_experiment(args)
 
   elif sys.argv[1] == 'ddpg' or sys.argv[1] == 'rdpg':
@@ -194,7 +191,7 @@ if __name__ == "__main__":
     """
       Utility for running Recurrent/Deep Deterministic Policy Gradients.
     """
-    from rl.algos.dpg import run_experiment
+    from algos.dpg import run_experiment
     parser.add_argument("--hidden_size",            default=32,   type=int)       # neurons in hidden layers
     parser.add_argument("--layers",                 default=2,     type=int)      # number of hidden layres
     parser.add_argument("--timesteps",       "-t",  default=1e6,   type=int)      # number of timesteps in replay buffer
@@ -227,12 +224,51 @@ if __name__ == "__main__":
 
     run_experiment(args)
 
-  elif sys.argv[1] == 'td3':
+  elif sys.argv[1] == 'td3' or sys.argv[1] == 'rtd3':
+
+    if sys.argv[1] == 'td3':
+      recurrent = False
+    if sys.argv[1] == 'rtd3':
+      recurrent = True
+
     sys.argv.remove(sys.argv[1])
     """
       Utility for running Twin-Delayed Deep Deterministic policy gradients.
 
     """
+    from algos.td3 import run_experiment
+    parser.add_argument("--hidden_size",            default=32,   type=int)       # neurons in hidden layers
+    parser.add_argument("--layers",                 default=2,     type=int)      # number of hidden layres
+    parser.add_argument("--timesteps",       "-t",  default=1e6,   type=int)      # number of timesteps in replay buffer
+    parser.add_argument("--start_timesteps",        default=1e4,   type=int)      # number of timesteps to generate random actions for
+    parser.add_argument("--load_actor",             default=None,  type=str)      # load an actor from a .pt file
+    parser.add_argument("--load_critic1",           default=None,  type=str)      # load a critic from a .pt file
+    parser.add_argument("--load_critic2",           default=None,  type=str)      # load a critic from a .pt file
+    parser.add_argument('--discount',               default=0.99,  type=float)    # the discount factor
+    parser.add_argument('--expl_noise',             default=0.2,   type=float)    # random noise used for exploration
+    parser.add_argument('--tau',                    default=0.01, type=float)     # update factor for target networks
+    parser.add_argument("--a_lr",           "-alr", default=1e-5,  type=float)    # adam learning rate for critic
+    parser.add_argument("--c_lr",           "-clr", default=1e-4,  type=float)    # adam learning rate for actor
+    parser.add_argument("--traj_len",       "-tl",  default=1000,  type=int)      # max trajectory length for environment
+    parser.add_argument("--center_reward",  "-r",   action='store_true')          # normalize rewards to a normal distribution
+    parser.add_argument("--batch_size",             default=64,    type=int)      # batch size for policy update
+    parser.add_argument("--updates",                default=1,    type=int)       # (if recurrent) number of times to update policy per episode
+    parser.add_argument("--update_every",           default=5,    type=int)       # how many episodes to skip before updating
+    parser.add_argument("--eval_every",             default=100,   type=int)      # how often to evaluate the trained policy
+    parser.add_argument("--save_actor",             default=None, type=str)
+    parser.add_argument("--save_critics",           default=None, type=str)
+
+    if not recurrent:
+      parser.add_argument("--logdir",                 default="./logs/td3/", type=str)
+    else:
+      parser.add_argument("--logdir",                 default="./logs/rtd3/", type=str)
+
+    parser.add_argument("--seed",     "-s",   default=0, type=int)
+    parser.add_argument("--env_name", "-e",   default="Hopper-v3")
+    args = parser.parse_args()
+    args.recurrent = recurrent
+
+    run_experiment(args)
     raise NotImplementedError
   elif sys.argv[1] == 'ppo':
     sys.argv.remove(sys.argv[1])

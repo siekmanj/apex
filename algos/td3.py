@@ -47,14 +47,14 @@ class TD3():
     for param, target_param in zip(self.behavioral_actor.parameters(), self.target_actor.parameters()):
       target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
-  def update_policy(self, replay_buffer, batch_size=256, traj_len=1000, grad_clip=None):
+  def update_policy(self, replay_buffer, batch_size=256, traj_len=1000, grad_clip=None, noise_clip=0.5):
     self.n += 1
 
     states, actions, next_states, rewards, not_dones, steps = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
 
     with torch.no_grad():
-      noise = (torch.randn_like(actions) * self.policy_noise).clamp(-1, 1)
-      next_actions = (self.target_actor(next_states) + noise).clamp(-1, 1)
+      noise = (torch.randn_like(actions) * self.policy_noise).clamp(-noise_clip, noise_clip)
+      next_actions = (self.target_actor(next_states) + noise).clamp(-noise_clip, noise_clip)
 
       target_q1 = self.target_q1(next_states, next_actions)
       target_q2 = self.target_q2(next_states, next_actions)
@@ -181,10 +181,12 @@ def run_experiment(args):
     # Update the policy once our replay buffer is big enough
     if buffer_ready and done:
       update_steps = 0
-      if not algo.recurrent:
-        num_updates = episode_timesteps * args.updates
+
+      if algo.recurrent:
+        num_updates = 1
       else:
-        num_updates = args.updates
+        num_updates = episode_timesteps
+
       for _ in range(num_updates):
         u_loss, u_steps = algo.update_policy(replay_buff, args.batch_size, traj_len=args.traj_len)
         episode_loss += u_loss / num_updates

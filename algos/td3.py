@@ -47,7 +47,7 @@ class TD3():
     for param, target_param in zip(self.behavioral_actor.parameters(), self.target_actor.parameters()):
       target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
-  def update_policy(self, replay_buffer, batch_size=256, traj_len=1000, grad_clip=None, noise_clip=0.5):
+  def update_policy(self, replay_buffer, batch_size=256, traj_len=1000, grad_clip=None, noise_clip=0.2):
     self.n += 1
 
     states, actions, next_states, rewards, not_dones, steps = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
@@ -170,10 +170,10 @@ def run_experiment(args):
     warmup = timesteps < args.start_timesteps
 
     state, r, done = collect_experience(algo.behavioral_actor, env, replay_buff, state, episode_timesteps,
-                                               max_len=args.traj_len,
-                                               random_action=warmup,
-                                               noise=args.expl_noise, 
-                                               do_trajectory=algo.recurrent)
+                                        max_len=args.traj_len,
+                                        random_action=warmup,
+                                        noise=args.expl_noise, 
+                                        do_trajectory=algo.recurrent)
     episode_reward += r
     episode_timesteps += 1
     timesteps += 1

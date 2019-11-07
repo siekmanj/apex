@@ -2,15 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from policies.base import Net
+
 # The base class for a critic. Includes functions for normalizing reward and state (optional)
-class Critic(nn.Module):
+class Critic(Net):
   def __init__(self):
     super(Critic, self).__init__()
-    self.is_recurrent = False
-
-    self.welford_state_mean = 0.0
-    self.welford_state_mean_diff = 1.0
-    self.welford_state_n = 1
 
     self.welford_reward_mean = 0.0
     self.welford_reward_mean_diff = 1.0
@@ -37,14 +34,6 @@ class Critic(nn.Module):
 
     return (r - self.welford_reward_mean) / torch.sqrt(self.welford_reward_mean_diff / self.welford_reward_n)
 
-  def normalize_state(self, state, update=True):
-    if update:
-      state_old = self.welford_state_mean
-      self.welford_state_mean += (state - state_old) / self.welford_state_n
-      self.welford_state_mean_diff += (state - state_old) * (state - state_old)
-      self.welford_state_n += 1
-    return (state - self.welford_state_mean) / torch.sqrt(self.welford_state_mean_diff / self.welford_state_n)
-
 class FF_Critic(Critic):
   def __init__(self, state_dim, action_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET'):
     super(FF_Critic, self).__init__()
@@ -58,9 +47,6 @@ class FF_Critic(Critic):
     self.env_name = env_name
 
   def forward(self, state, action):
-
-    #print(state.size(), state)
-    #print(action.size(), action)
     if len(state.size()) > 2:
       x = torch.cat([state, action], 2)
     elif len(state.size()) > 1:

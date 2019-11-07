@@ -248,6 +248,7 @@ if __name__ == "__main__":
     parser.add_argument("--load_critic2",           default=None,  type=str)      # load a critic from a .pt file
     parser.add_argument('--discount',               default=0.99,  type=float)    # the discount factor
     parser.add_argument('--expl_noise',             default=0.1,   type=float)    # random noise used for exploration
+    parser.add_argument('--policy_noise',           default=0.2,   type=float)    # random noise used for exploration
     parser.add_argument('--tau',                    default=0.005, type=float)    # update factor for target networks
     parser.add_argument("--a_lr",           "-alr", default=1e-5,  type=float)    # adam learning rate for critic
     parser.add_argument("--c_lr",           "-clr", default=1e-4,  type=float)    # adam learning rate for actor

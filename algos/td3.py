@@ -8,7 +8,7 @@ import random
 from algos.dpg import ReplayBuffer, eval_policy, collect_experience
 
 class TD3():
-  def __init__(self, actor, q1, q2, a_lr, c_lr, discount=0.99, tau=0.001, center_reward=False):
+  def __init__(self, actor, q1, q2, a_lr, c_lr, discount=0.99, tau=0.001, center_reward=False, policy_noise=0.2):
     if actor.is_recurrent or q1.is_recurrent or q2.is_recurrent:
       self.recurrent = True
     else:
@@ -33,7 +33,7 @@ class TD3():
     self.center_reward = center_reward
     self.update_every = 2
 
-    self.policy_noise = 0.01
+    self.policy_noise = policy_noise
 
     self.n = 0
 

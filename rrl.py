@@ -239,8 +239,8 @@ if __name__ == "__main__":
 
     """
     from algos.td3 import run_experiment
-    parser.add_argument("--hidden_size",            default=64,   type=int)       # neurons in hidden layers
-    parser.add_argument("--layers",                 default=1,     type=int)      # number of hidden layres
+    parser.add_argument("--hidden_size",            default=256,   type=int)      # neurons in hidden layers
+    parser.add_argument("--layers",                 default=2,     type=int)      # number of hidden layres
     parser.add_argument("--timesteps",       "-t",  default=1e6,   type=int)      # number of timesteps in replay buffer
     parser.add_argument("--start_timesteps",        default=1e4,   type=int)      # number of timesteps to generate random actions for
     parser.add_argument("--load_actor",             default=None,  type=str)      # load an actor from a .pt file
@@ -248,15 +248,17 @@ if __name__ == "__main__":
     parser.add_argument("--load_critic2",           default=None,  type=str)      # load a critic from a .pt file
     parser.add_argument('--discount',               default=0.99,  type=float)    # the discount factor
     parser.add_argument('--expl_noise',             default=0.1,   type=float)    # random noise used for exploration
+    parser.add_argument('--policy_noise',           default=0.2,   type=float)    # random noise used for exploration
+    parser.add_argument('--noise_clip',             default=0.5,   type=float)    # random noise used for exploration
     parser.add_argument('--tau',                    default=0.005, type=float)    # update factor for target networks
-    parser.add_argument("--a_lr",           "-alr", default=1e-5,  type=float)    # adam learning rate for critic
-    parser.add_argument("--c_lr",           "-clr", default=1e-4,  type=float)    # adam learning rate for actor
+    parser.add_argument("--a_lr",           "-alr", default=3e-4,  type=float)    # adam learning rate for critic
+    parser.add_argument("--c_lr",           "-clr", default=3e-4,  type=float)    # adam learning rate for actor
     parser.add_argument("--traj_len",       "-tl",  default=1000,  type=int)      # max trajectory length for environment
     parser.add_argument("--center_reward",  "-r",   action='store_true')          # normalize rewards to a normal distribution
     parser.add_argument("--normalize"       '-n',   action='store_true')          # normalize states online
     parser.add_argument("--batch_size",             default=256,    type=int)     # batch size for policy update
     parser.add_argument("--updates",                default=1,    type=int)       # (if recurrent) number of times to update policy per episode
-    parser.add_argument("--update_every",           default=5,    type=int)       # how many episodes to skip before updating
+    parser.add_argument("--update_every",           default=2,    type=int)       # how many episodes to skip before updating
     parser.add_argument("--eval_every",             default=100,   type=int)      # how often to evaluate the trained policy
     parser.add_argument("--save_actor",             default=None, type=str)
     parser.add_argument("--save_critics",           default=None, type=str)

@@ -33,7 +33,7 @@ class TD3():
     self.center_reward = center_reward
     self.update_every = 2
 
-    self.policy_noise = 0.01
+    self.policy_noise = 0.2
 
     self.n = 0
 

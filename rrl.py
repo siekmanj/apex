@@ -255,7 +255,7 @@ if __name__ == "__main__":
     parser.add_argument("--c_lr",           "-clr", default=3e-4,  type=float)    # adam learning rate for actor
     parser.add_argument("--traj_len",       "-tl",  default=1000,  type=int)      # max trajectory length for environment
     parser.add_argument("--center_reward",  "-r",   action='store_true')          # normalize rewards to a normal distribution
-    parser.add_argument("--normalize"       '-n',   action='store_true')          # normalize states online
+    parser.add_argument("--normalize",              action='store_true')          # normalize states online
     parser.add_argument("--batch_size",             default=256,    type=int)     # batch size for policy update
     parser.add_argument("--updates",                default=1,    type=int)       # (if recurrent) number of times to update policy per episode
     parser.add_argument("--update_every",           default=2,    type=int)       # how many episodes to skip before updating
@@ -274,7 +274,6 @@ if __name__ == "__main__":
     args.recurrent = recurrent
 
     run_experiment(args)
-    raise NotImplementedError
   elif sys.argv[1] == 'ppo':
     sys.argv.remove(sys.argv[1])
     """

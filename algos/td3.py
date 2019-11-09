@@ -5,10 +5,16 @@ import torch.nn.functional as F
 import numpy as np
 import random
 
-from algos.dpg import ReplayBuffer, eval_policy, collect_experience
+from algos.dpg import eval_policy, collect_experience
+
+USE_ORIGINAL = False
+if USE_ORIGINAL:
+  from utils import ReplayBuffer
+else:
+  from algos.dpg import ReplayBuffer
 
 class TD3():
-  def __init__(self, actor, q1, q2, a_lr, c_lr, discount=0.99, tau=0.001, center_reward=False, policy_noise=0.2):
+  def __init__(self, actor, q1, q2, a_lr, c_lr, discount=0.99, tau=0.001, center_reward=False, policy_noise=0.2, update_freq=2, noise_clip=0.5, normalize=False):
     if actor.is_recurrent or q1.is_recurrent or q2.is_recurrent:
       self.recurrent = True
     else:
@@ -31,9 +37,11 @@ class TD3():
     self.discount   = discount
     self.tau        = tau
     self.center_reward = center_reward
-    self.update_every = 2
+    self.update_every = update_freq
 
     self.policy_noise = policy_noise
+
+    self.normalize = normalize
 
     self.n = 0
 
@@ -50,11 +58,19 @@ class TD3():
   def update_policy(self, replay_buffer, batch_size=256, traj_len=1000, grad_clip=None, noise_clip=0.2):
     self.n += 1
 
-    states, actions, next_states, rewards, not_dones, steps = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
+    if USE_ORIGINAL:
+      states, actions, next_states, rewards, not_dones = replay_buffer.sample(batch_size)
+    else:
+      states, actions, next_states, rewards, not_dones, steps = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
 
     with torch.no_grad():
-      noise = (torch.randn_like(actions) * self.policy_noise).clamp(-noise_clip, noise_clip)
-      next_actions = (self.target_actor(next_states) + noise).clamp(-noise_clip, noise_clip)
+      if self.normalize:
+        print("NORMALIZING")
+        states      = self.behavioral_actor.normalize_state(states, update=False)
+        next_states = self.behavioral_actor.normalize_state(next_states, update=False)
+
+      noise        = (torch.randn_like(actions) * self.policy_noise).clamp(-noise_clip, noise_clip)
+      next_actions = (self.target_actor(next_states) + noise)
 
       target_q1 = self.target_q1(next_states, next_actions)
       target_q2 = self.target_q2(next_states, next_actions)
@@ -87,7 +103,10 @@ class TD3():
       
       self.soft_update(self.tau)
 
-    return critic_loss.item(), steps
+    if USE_ORIGINAL:
+      return critic_loss.item(), 0
+    else:
+      return critic_loss.item(), steps
 
 def run_experiment(args):
   from time import time
@@ -121,7 +140,13 @@ def run_experiment(args):
     Q1 = FF_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
     Q2 = FF_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
 
-  algo = TD3(actor, Q1, Q2, args.a_lr, args.c_lr, discount=args.discount, tau=args.tau, center_reward=args.center_reward)
+  algo = TD3(actor, Q1, Q2, args.a_lr, args.c_lr,
+             discount=args.discount, 
+             tau=args.tau, 
+             center_reward=args.center_reward, 
+             policy_noise=args.policy_noise, 
+             update_freq=args.update_every, 
+             noise_clip=args.noise_clip)
 
   replay_buff = ReplayBuffer(obs_space, act_space, args.timesteps)
 
@@ -130,6 +155,7 @@ def run_experiment(args):
   else:
     print("Twin-Delayed Deep Deterministic Policy Gradient:")
 
+  print(args)
   print("\tenv:            {}".format(args.env_name))
   print("\tseed:           {}".format(args.seed))
   print("\ttimesteps:      {:n}".format(args.timesteps))
@@ -138,6 +164,7 @@ def run_experiment(args):
   print("\tdiscount:       {}".format(args.discount))
   print("\ttau:            {}".format(args.tau))
   print("\tnorm reward:    {}".format(args.center_reward))
+  print("\tnorm states:    {}".format(args.normalize))
   print("\tbatch_size:     {}".format(args.batch_size))
   print("\twarmup period:  {:n}".format(args.start_timesteps))
   print()
@@ -173,7 +200,10 @@ def run_experiment(args):
                                         max_len=args.traj_len,
                                         random_action=warmup,
                                         noise=args.expl_noise, 
-                                        do_trajectory=algo.recurrent)
+                                        do_trajectory=algo.recurrent,
+                                        original=USE_ORIGINAL,
+                                        normalize=algo.normalize)
+
     episode_reward += r
     episode_timesteps += 1
     timesteps += 1

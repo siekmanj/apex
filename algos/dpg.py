@@ -86,7 +86,7 @@ class ReplayBuffer():
       return self.state[idx], self.action[idx], self.next_state[idx], self.reward[idx], self.not_done[idx], batch_size
 
 class DPG():
-  def __init__(self, actor, critic, a_lr, c_lr, discount=0.99, tau=0.001, center_reward=False):
+  def __init__(self, actor, critic, a_lr, c_lr, discount=0.99, tau=0.001, center_reward=False, normalize=False):
 
     if actor.is_recurrent or critic.is_recurrent:
       self.recurrent = True
@@ -107,6 +107,7 @@ class DPG():
     self.discount   = discount
     self.tau        = tau
     self.center_reward = center_reward
+    self.normalize = normalize
 
   def soft_update(self, tau):
     for param, target_param in zip(self.behavioral_critic.parameters(), self.target_critic.parameters()):
@@ -118,7 +119,13 @@ class DPG():
   def update_policy(self, replay_buffer, batch_size=256, traj_len=1000, grad_clip=None):
     states, actions, next_states, rewards, not_dones, steps = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
 
-    target_q = rewards + (not_dones * self.discount * self.target_critic(next_states, self.target_actor(next_states))).detach()
+    with torch.no_grad():
+      if self.normalize:
+        print("NORMALIZING!!") 
+        states      = self.behavioral_actor.normalize_state(states, update=False)
+        next_states = self.behavioral_actor.normalize_state(next_states, update=False)
+
+      target_q = rewards + (not_dones * self.discount * self.target_critic(next_states, self.target_actor(next_states)))
     current_q = self.behavioral_critic(states, actions)
 
     critic_loss = F.mse_loss(current_q, target_q)
@@ -156,6 +163,7 @@ def eval_policy(policy, env, evals=10, max_traj_len=1000):
       policy.init_hidden_state()
 
     while not done and timesteps < max_traj_len:
+      state = policy.normalize_state(state, update=False)
       action = policy.forward(torch.Tensor(state)).detach().numpy()
       state, reward, done, _ = env.step(action)
       eval_reward += reward
@@ -163,23 +171,33 @@ def eval_policy(policy, env, evals=10, max_traj_len=1000):
 
   return eval_reward/evals
 
-def collect_experience(policy, env, replay_buffer, initial_state, steps, random_action=False, noise=0.2, do_trajectory=False, max_len=1000):
-  if not random_action:
-    a = policy.forward(torch.Tensor(initial_state)).detach().numpy() + np.random.normal(0, noise, size=policy.action_dim)
-  else:
-    a = np.random.randn(policy.action_dim)
+def collect_experience(policy, env, replay_buffer, initial_state, steps, random_action=False, noise=0.2, do_trajectory=False, max_len=1000, original=False, normalize=True):
+  with torch.no_grad():
+    if normalize:
+      print("NORMALIZING EXPERIENCE")
+      state = policy.normalize_state(torch.Tensor(initial_state))
+    else:
+      state = torch.Tensor(initial_state)
 
-  state_t1, r, done, _ = env.step(a)
+    if not random_action:
+      a = policy.forward(torch.Tensor(state)).numpy() + np.random.normal(0, noise, size=policy.action_dim)
+    else:
+      a = np.random.randn(policy.action_dim)
 
-  if done or steps > max_len:
-    state_t1 = env.reset()
-    done = True
-    if hasattr(policy, 'init_hidden_state'):
-      policy.init_hidden_state()
+    state_t1, r, done, _ = env.step(a)
 
-  replay_buffer.push(initial_state, a, state_t1.astype(np.float32), r, done)
+    if done or steps > max_len:
+      state_t1 = env.reset()
+      done = True
+      if hasattr(policy, 'init_hidden_state'):
+        policy.init_hidden_state()
 
-  return state_t1, r, done
+    if not original:
+      replay_buffer.push(initial_state, a, state_t1.astype(np.float32), r, done)
+    else:
+      replay_buffer.add(initial_state, a, state_t1.astype(np.float32), r, done)
+
+    return state_t1, r, done
 
 def run_experiment(args):
   from time import time
@@ -211,7 +229,7 @@ def run_experiment(args):
     actor = FF_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
     critic = FF_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
 
-  algo = DPG(actor, critic, args.a_lr, args.c_lr, discount=args.discount, tau=args.tau, center_reward=args.center_reward)
+  algo = DPG(actor, critic, args.a_lr, args.c_lr, discount=args.discount, tau=args.tau, center_reward=args.center_reward, normalize=args.normalize)
 
   replay_buff = ReplayBuffer(obs_space, act_space, args.timesteps)
 
@@ -227,6 +245,7 @@ def run_experiment(args):
   print("\tdiscount:       {}".format(args.discount))
   print("\ttau:            {}".format(args.tau))
   print("\tnorm reward:    {}".format(args.center_reward))
+  print("\tnorm states:    {}".format(args.normalize))
   print("\tbatch_size:     {}".format(args.batch_size))
   print("\twarmup period:  {:n}".format(args.start_timesteps))
   print()
@@ -262,7 +281,8 @@ def run_experiment(args):
                                                max_len=args.traj_len,
                                                random_action=warmup,
                                                noise=args.expl_noise, 
-                                               do_trajectory=algo.recurrent)
+                                               do_trajectory=algo.recurrent,
+                                               normalize=algo.normalize)
     episode_reward += r
     episode_timesteps += 1
     timesteps += 1

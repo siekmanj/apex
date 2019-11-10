@@ -7,11 +7,7 @@ import random
 
 from algos.dpg import eval_policy, collect_experience
 
-USE_ORIGINAL = False
-if USE_ORIGINAL:
-  from utils import ReplayBuffer
-else:
-  from algos.dpg import ReplayBuffer
+from algos.dpg import ReplayBuffer
 
 class TD3():
   def __init__(self, actor, q1, q2, a_lr, c_lr, discount=0.99, tau=0.001, center_reward=False, policy_noise=0.2, update_freq=2, noise_clip=0.5, normalize=False):
@@ -58,10 +54,7 @@ class TD3():
   def update_policy(self, replay_buffer, batch_size=256, traj_len=1000, grad_clip=None, noise_clip=0.2):
     self.n += 1
 
-    if USE_ORIGINAL:
-      states, actions, next_states, rewards, not_dones = replay_buffer.sample(batch_size)
-    else:
-      states, actions, next_states, rewards, not_dones, steps = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
+    states, actions, next_states, rewards, not_dones, steps = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
 
     with torch.no_grad():
       if self.normalize:
@@ -103,10 +96,7 @@ class TD3():
       
       self.soft_update(self.tau)
 
-    if USE_ORIGINAL:
-      return critic_loss.item(), 0
-    else:
-      return critic_loss.item(), steps
+    return critic_loss.item(), steps
 
 def run_experiment(args):
   from time import time
@@ -201,7 +191,7 @@ def run_experiment(args):
                                         random_action=warmup,
                                         noise=args.expl_noise, 
                                         do_trajectory=algo.recurrent,
-                                        original=USE_ORIGINAL,
+                                        original=False,
                                         normalize=algo.normalize)
 
     episode_reward += r

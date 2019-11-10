@@ -10,8 +10,8 @@ class Net(nn.Module):
     super(Net, self).__init__()
     self.is_recurrent = False
 
-    self.welford_state_mean = 0.0
-    self.welford_state_mean_diff = 1.0
+    self.welford_state_mean = torch.zeros(1)
+    self.welford_state_mean_diff = torch.ones(1)
     self.welford_state_n = 1
 
     self.env_name = None
@@ -20,6 +20,7 @@ class Net(nn.Module):
     raise NotImplementedError
 
   def normalize_state(self, state, update=True):
+    state = torch.Tensor(state)
     if update:
       if len(state.size()) == 1: # If we get a single vector state
         state_old = self.welford_state_mean

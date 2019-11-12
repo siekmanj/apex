@@ -28,6 +28,11 @@ class Net(nn.Module):
 
   def normalize_state(self, state, update=True):
     state = torch.Tensor(state)
+
+    if self.welford_state_n == 1:
+      self.welford_state_mean = torch.zeros(state.size(-1))
+      self.welford_state_mean_diff = torch.ones(state.size(-1))
+
     if update:
       if len(state.size()) == 1: # If we get a single state vector 
         state_old = self.welford_state_mean

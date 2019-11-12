@@ -160,9 +160,8 @@ def run_experiment(args):
 
   # wrapper function for creating parallelized envs
   env_thunk = env_factory(args.env_name)
-  with env_thunk() as env:
-      obs_space = env.observation_space.shape[0]
-      act_space = env.action_space.shape[0]
+  obs_space = env_thunk().observation_space.shape[0]
+  act_space = env_thunk().action_space.shape[0]
 
   # wrapper function for creating parallelized policies
   def policy_thunk():

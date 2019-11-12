@@ -121,7 +121,6 @@ class DPG():
 
     with torch.no_grad():
       if self.normalize:
-        print("NORMALIZING!!") 
         states      = self.behavioral_actor.normalize_state(states, update=False)
         next_states = self.behavioral_actor.normalize_state(next_states, update=False)
 
@@ -171,10 +170,9 @@ def eval_policy(policy, env, evals=10, max_traj_len=1000):
 
   return eval_reward/evals
 
-def collect_experience(policy, env, replay_buffer, initial_state, steps, random_action=False, noise=0.2, do_trajectory=False, max_len=1000, original=False, normalize=True):
+def collect_experience(policy, env, replay_buffer, initial_state, steps, random_action=False, noise=0.2, do_trajectory=False, max_len=1000, normalize=True):
   with torch.no_grad():
     if normalize:
-      print("NORMALIZING EXPERIENCE")
       state = policy.normalize_state(torch.Tensor(initial_state))
     else:
       state = torch.Tensor(initial_state)
@@ -192,10 +190,7 @@ def collect_experience(policy, env, replay_buffer, initial_state, steps, random_
       if hasattr(policy, 'init_hidden_state'):
         policy.init_hidden_state()
 
-    if not original:
-      replay_buffer.push(initial_state, a, state_t1.astype(np.float32), r, done)
-    else:
-      replay_buffer.add(initial_state, a, state_t1.astype(np.float32), r, done)
+    replay_buffer.push(initial_state, a, state_t1.astype(np.float32), r, done)
 
     return state_t1, r, done
 

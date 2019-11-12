@@ -58,7 +58,6 @@ class TD3():
 
     with torch.no_grad():
       if self.normalize:
-        print("NORMALIZING")
         states      = self.behavioral_actor.normalize_state(states, update=False)
         next_states = self.behavioral_actor.normalize_state(next_states, update=False)
 
@@ -136,7 +135,8 @@ def run_experiment(args):
              center_reward=args.center_reward, 
              policy_noise=args.policy_noise, 
              update_freq=args.update_every, 
-             noise_clip=args.noise_clip)
+             noise_clip=args.noise_clip,
+             normalize=args.normalize)
 
   replay_buff = ReplayBuffer(obs_space, act_space, args.timesteps)
 
@@ -191,7 +191,6 @@ def run_experiment(args):
                                         random_action=warmup,
                                         noise=args.expl_noise, 
                                         do_trajectory=algo.recurrent,
-                                        original=False,
                                         normalize=algo.normalize)
 
     episode_reward += r

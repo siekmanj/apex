@@ -52,6 +52,8 @@ class FF_Actor(Actor):
     self.env_name = env_name
     self.nonlinearity = nonlinearity
 
+    self.initialize_parameters()
+
   def forward(self, state):
     x = state
     for idx, layer in enumerate(self.actor_layers):

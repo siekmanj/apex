@@ -46,6 +46,8 @@ class FF_Critic(Critic):
 
     self.env_name = env_name
 
+    self.initialize_parameters()
+
   def forward(self, state, action):
     if len(state.size()) > 2:
       x = torch.cat([state, action], 2)

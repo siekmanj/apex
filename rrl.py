@@ -129,6 +129,7 @@ def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
       if hasattr(env, 'simrate'):
         start = time.time()
       
+      state = policy.normalize_state(state, update=False)
       action = policy.forward(torch.Tensor(state)).detach().numpy()
       state, reward, done, _ = env.step(action)
       if visualize:
@@ -280,16 +281,35 @@ if __name__ == "__main__":
       Utility for running Proximal Policy Optimization.
 
     """
-    raise NotImplementedError
+    from algos.ppo import run_experiment
+
+    parser.add_argument("--hidden_size",            default=256,   type=int)      # neurons in hidden layers
+    parser.add_argument("--layers",                 default=2,     type=int)      # number of hidden layres
+    parser.add_argument("--timesteps",       "-t",  default=1e6,   type=int)      # number of timesteps to run experiment for
+    parser.add_argument("--traj_len",       "-tl",  default=1000,  type=int)      # max trajectory length for environment
+
+    parser.add_argument('--discount',               default=0.99,  type=float)    # the discount factor
+    parser.add_argument("--a_lr",           "-alr", default=3e-4,  type=float)    # adam learning rate for critic
+    parser.add_argument("--c_lr",           "-clr", default=3e-4,  type=float)    # adam learning rate for actor
+    parser.add_argument("--batch_size",             default=256,    type=int)     # batch size for policy update
+
+    parser.add_argument("--eval_every",             default=100,   type=int)      # how often to evaluate the trained policy
+    parser.add_argument("--save_actor",             default=None, type=str)
+    parser.add_argument("--save_critics",           default=None, type=str)
+    args = parser.parse_args()
+
+    run_experiment(args)
 
   elif sys.argv[1] == 'eval':
     sys.argv.remove(sys.argv[1])
 
     parser.add_argument("--policy", default="./trained_models/ddpg/ddpg_actor.pt", type=str)
+    parser.add_argument("--env_name", default=None, type=str)
+    parser.add_argument("--traj_len", default=400, type=str)
     args = parser.parse_args()
 
     policy = torch.load(args.policy)
 
-    eval_policy(policy)
+    eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len)
   else:
     print("Invalid algorithm '{}'".format(sys.argv[1]))

@@ -239,7 +239,7 @@ if __name__ == "__main__":
       Utility for running Twin-Delayed Deep Deterministic policy gradients.
 
     """
-    from algos.td3 import run_experiment
+    from algos.td3n import run_experiment
     parser.add_argument("--hidden_size",            default=256,   type=int)      # neurons in hidden layers
     parser.add_argument("--layers",                 default=2,     type=int)      # number of hidden layres
     parser.add_argument("--timesteps",       "-t",  default=1e6,   type=int)      # number of timesteps in replay buffer
@@ -305,7 +305,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--policy", default="./trained_models/ddpg/ddpg_actor.pt", type=str)
     parser.add_argument("--env_name", default=None, type=str)
-    parser.add_argument("--traj_len", default=400, type=str)
+    parser.add_argument("--traj_len", default=400, type=int)
     args = parser.parse_args()
 
     policy = torch.load(args.policy)

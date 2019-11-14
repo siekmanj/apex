@@ -30,11 +30,11 @@ def env_factory(path, state_est=True, mirror=False, **kwargs):
       from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
 
       if path == 'Cassie-v0':
-        env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=False)
+        env_fn = partial(CassieEnv, "walking", clock_based=False, state_est=False)
+      elif path == 'CassieNoDelta-v0':
+        env_fn = partial(CassieEnv_nodelta, "walking", clock_based=False, state_est=False)
       elif path == 'CassieRandomDynamics-v0':
-        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
-      elif path == 'CassieRandomDynamics-v0':
-        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
+        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=False, state_est=False)
 
       """
       if mirror:
@@ -148,6 +148,8 @@ def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
 if __name__ == "__main__":
   import sys, argparse, time, os
   parser = argparse.ArgumentParser()
+  parser.add_argument("--state_est", default=False, type=bool)
+  parser.add_argument("--clock_based", default=False, type=bool)
 
   print_logo(subtitle="Maintained by Oregon State University's Dynamic Robotics Lab")
 

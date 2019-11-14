@@ -82,7 +82,10 @@ class TD3():
       
       self.soft_update(self.tau)
 
-    return critic_loss.item(), steps
+      return critic_loss.item(), -actor_loss.item(), steps
+    else:
+      return critic_loss.item(), 0, steps
+
 
 def run_experiment(args):
   from time import time
@@ -162,6 +165,7 @@ def run_experiment(args):
   training_start = time()
   episode_start = time()
   episode_loss = 0
+  actor_loss = 0
   update_steps = 0
   best_reward = None
 
@@ -193,8 +197,9 @@ def run_experiment(args):
         num_updates = episode_timesteps
 
       for _ in range(num_updates):
-        u_loss, u_steps = algo.update_policy(replay_buff, args.batch_size, traj_len=args.traj_len)
+        u_loss, a_loss, u_steps = algo.update_policy(replay_buff, args.batch_size, traj_len=args.traj_len)
         episode_loss += u_loss / num_updates
+        actor_loss += a_loss / num_updates
         update_steps += u_steps
 
     if done:
@@ -203,6 +208,8 @@ def run_experiment(args):
       logger.add_scalar(args.env_name + ' episode length', episode_timesteps, iter)
       logger.add_scalar(args.env_name + ' episode reward', episode_reward, iter)
       logger.add_scalar(args.env_name + ' critic loss', episode_loss, iter)
+      if actor_loss > 0:
+        logger.add_scalar(args.env_name + ' actor loss', actor_loss, iter)
 
       completion = 1 - float(timesteps) / args.timesteps
       avg_sample_r = (time() - training_start)/timesteps

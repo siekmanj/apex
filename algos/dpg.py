@@ -218,11 +218,11 @@ def run_experiment(args):
   act_space = env.action_space.shape[0]
 
   if args.recurrent:
-    actor = LSTM_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
-    critic = LSTM_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
+    actor = LSTM_Actor(obs_space, act_space, env_name=args.env_name)
+    critic = LSTM_Critic(obs_space, act_space, env_name=args.env_name)
   else:
-    actor = FF_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
-    critic = FF_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
+    actor = FF_Actor(obs_space, act_space, env_name=args.env_name)
+    critic = FF_Critic(obs_space, act_space, env_name=args.env_name)
 
   algo = DPG(actor, critic, args.a_lr, args.c_lr, discount=args.discount, tau=args.tau, center_reward=args.center_reward, normalize=args.normalize)
 
@@ -283,7 +283,7 @@ def run_experiment(args):
     timesteps += 1
 
     # Update the policy once our replay buffer is big enough
-    if buffer_ready and done:
+    if buffer_ready and done and not warmup:
       update_steps = 0
       if not algo.recurrent:
         num_updates = episode_timesteps * args.updates

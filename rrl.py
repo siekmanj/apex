@@ -129,6 +129,7 @@ def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
       if hasattr(env, 'simrate'):
         start = time.time()
       
+      state = policy.normalize_state(state, update=False)
       action = policy.forward(torch.Tensor(state)).detach().numpy()
       state, reward, done, _ = env.step(action)
       if visualize:
@@ -193,8 +194,6 @@ if __name__ == "__main__":
       Utility for running Recurrent/Deep Deterministic Policy Gradients.
     """
     from algos.dpg import run_experiment
-    parser.add_argument("--hidden_size",            default=32,   type=int)       # neurons in hidden layers
-    parser.add_argument("--layers",                 default=2,     type=int)      # number of hidden layres
     parser.add_argument("--timesteps",       "-t",  default=1e6,   type=int)      # number of timesteps in replay buffer
     parser.add_argument("--start_timesteps",        default=1e4,   type=int)      # number of timesteps to generate random actions for
     parser.add_argument("--load_actor",             default=None,  type=str)      # load an actor from a .pt file
@@ -206,6 +205,8 @@ if __name__ == "__main__":
     parser.add_argument("--c_lr",           "-clr", default=1e-4,  type=float)    # adam learning rate for actor
     parser.add_argument("--traj_len",       "-tl",  default=1000,  type=int)      # max trajectory length for environment
     parser.add_argument("--center_reward",  "-r",   action='store_true')          # normalize rewards to a normal distribution
+    parser.add_argument("--normc_init",     "-r",   default=True,  type=bool)     # using col norm to init weights
+    parser.add_argument("--normalize",              action='store_true')          # normalize states online
     parser.add_argument("--normalize"       '-n',   action='store_true')          # normalize states online
     parser.add_argument("--batch_size",             default=64,    type=int)      # batch size for policy update
     parser.add_argument("--updates",                default=1,    type=int)       # (if recurrent) number of times to update policy per episode
@@ -239,8 +240,6 @@ if __name__ == "__main__":
 
     """
     from algos.td3 import run_experiment
-    parser.add_argument("--hidden_size",            default=256,   type=int)      # neurons in hidden layers
-    parser.add_argument("--layers",                 default=2,     type=int)      # number of hidden layres
     parser.add_argument("--timesteps",       "-t",  default=1e6,   type=int)      # number of timesteps in replay buffer
     parser.add_argument("--start_timesteps",        default=1e4,   type=int)      # number of timesteps to generate random actions for
     parser.add_argument("--load_actor",             default=None,  type=str)      # load an actor from a .pt file
@@ -255,6 +254,7 @@ if __name__ == "__main__":
     parser.add_argument("--c_lr",           "-clr", default=3e-4,  type=float)    # adam learning rate for actor
     parser.add_argument("--traj_len",       "-tl",  default=1000,  type=int)      # max trajectory length for environment
     parser.add_argument("--center_reward",  "-r",   action='store_true')          # normalize rewards to a normal distribution
+    parser.add_argument("--normc_init",     "-r",   default=True,  type=bool)     # using col norm to init weights
     parser.add_argument("--normalize",              action='store_true')          # normalize states online
     parser.add_argument("--batch_size",             default=256,    type=int)     # batch size for policy update
     parser.add_argument("--updates",                default=1,    type=int)       # (if recurrent) number of times to update policy per episode

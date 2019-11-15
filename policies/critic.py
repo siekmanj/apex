@@ -35,18 +35,19 @@ class Critic(Net):
     return (r - self.welford_reward_mean) / torch.sqrt(self.welford_reward_mean_diff / self.welford_reward_n)
 
 class FF_Critic(Critic):
-  def __init__(self, state_dim, action_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET'):
+  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name='NOT SET', normc_init=True):
     super(FF_Critic, self).__init__()
 
     self.critic_layers = nn.ModuleList()
-    self.critic_layers += [nn.Linear(state_dim + action_dim, hidden_size)]
-    for _ in range(hidden_layers-1):
-        self.critic_layers += [nn.Linear(hidden_size, hidden_size)]
-    self.network_out = nn.Linear(hidden_size, action_dim)
+    self.critic_layers += [nn.Linear(state_dim + action_dim, layers[0])]
+    for i in range(len(layers)-1):
+        self.critic_layers += [nn.Linear(layers[i], layers[i+1])]
+    self.network_out = nn.Linear(layers[-1], action_dim)
 
     self.env_name = env_name
 
-    self.initialize_parameters()
+    if normc_init:
+      self.initialize_parameters()
 
   def forward(self, state, action):
     if len(state.size()) > 2:
@@ -62,19 +63,22 @@ class FF_Critic(Critic):
     return self.network_out(x)
 
 class LSTM_Critic(Critic):
-  def __init__(self, input_dim, action_dim, hidden_size=64, hidden_layers=1, env_name='NOT SET'):
+  def __init__(self, input_dim, action_dim, layers=(128, 128), env_name='NOT SET', normc_init=True):
     super(LSTM_Critic, self).__init__()
 
     self.critic_layers = nn.ModuleList()
-    self.critic_layers += [nn.LSTMCell(input_dim + action_dim, hidden_size)]
-    for _ in range(hidden_layers-1):
-        self.critic_layers += [nn.LSTMCell(hidden_size, hidden_size)]
-    self.network_out = nn.Linear(hidden_size, action_dim)
+    self.critic_layers += [nn.LSTMCell(input_dim + action_dim, layers[0])]
+    for i in range(len(layers)-1):
+        self.critic_layers += [nn.LSTMCell(layers[i], layers[i+1])]
+    self.network_out = nn.Linear(layers[-1], action_dim)
 
     self.init_hidden_state()
 
     self.is_recurrent = True
     self.env_name = env_name
+
+    if normc_init:
+      self.initialize_parameters()
 
   def get_hidden_state(self):
     return self.hidden, self.cells
@@ -92,7 +96,6 @@ class LSTM_Critic(Critic):
       self.init_hidden_state(batch_size=state.size(1))
       value = []
       for t, (state_batch_t, action_batch_t) in enumerate(zip(state, action)):
-        #print(state_batch_t.size(), action_batch_t.size())
         x_t = torch.cat([state_batch_t, action_batch_t], 1)
 
         for idx, layer in enumerate(self.critic_layers):
@@ -114,7 +117,6 @@ class LSTM_Critic(Critic):
 
         for idx, layer in enumerate(self.critic_layers):
           c, h = self.cells[idx], self.hidden[idx]
-          #self.cells[idx], self.hidden[idx] = layer(x_t, (c, h))
           self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
           x_t = self.hidden[idx]
         x_t = self.network_out(x_t)
@@ -123,13 +125,11 @@ class LSTM_Critic(Critic):
       x = torch.cat([a.float() for a in value])
 
     elif len(state.size()) == 1: # if we get a single timestep
-      print("MAKE SURE THIS WORKS.")
       x = torch.cat([state_t, action_t], 1)
       x = x.view(1, -1)
 
       for idx, layer in enumerate(self.critic_layers):
         c, h = self.cells[idx], self.hidden[idx]
-        #self.cells[idx], self.hidden[idx] = layer(x, (c, h))
         self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
         x = self.hidden[idx]
       x = self.network_out(x)

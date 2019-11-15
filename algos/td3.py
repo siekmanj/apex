@@ -121,13 +121,13 @@ def run_experiment(args):
   act_space = env.action_space.shape[0]
 
   if args.recurrent:
-    actor = LSTM_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
-    Q1 = LSTM_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
-    Q2 = LSTM_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
+    actor = LSTM_Actor(obs_space, act_space, env_name=args.env_name)
+    Q1 = LSTM_Critic(obs_space, act_space, env_name=args.env_name)
+    Q2 = LSTM_Critic(obs_space, act_space, env_name=args.env_name)
   else:
-    actor = FF_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
-    Q1 = FF_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
-    Q2 = FF_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
+    actor = FF_Actor(obs_space, act_space, env_name=args.env_name)
+    Q1 = FF_Critic(obs_space, act_space, env_name=args.env_name)
+    Q2 = FF_Critic(obs_space, act_space, env_name=args.env_name)
 
   algo = TD3(actor, Q1, Q2, args.a_lr, args.c_lr,
              discount=args.discount, 

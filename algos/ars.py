@@ -170,9 +170,9 @@ def run_experiment(args):
       return torch.load(args.load_model)
     else:
       if not args.recurrent:
-        policy = Linear_Actor(obs_space, act_space, hidden_size=args.hidden_size).float()
+        policy = Linear_Actor(obs_space, act_space).float()
       else:
-        policy = LSTM_Actor(obs_space, act_space, hidden_size=args.hidden_size).float()
+        policy = LSTM_Actor(obs_space, act_space).float()
 
       # policy parameters should be zero initialized according to ARS paper
       for p in policy.parameters():

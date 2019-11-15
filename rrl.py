@@ -13,7 +13,7 @@ class color:
 def print_logo(subtitle="", option=2):
   pass
 
-def env_factory(path, state_est=True, mirror=False, speed=None, clock_based=False **kwargs):
+def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=False, **kwargs):
     from functools import partial
 
     """

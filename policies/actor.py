@@ -38,21 +38,22 @@ class Linear_Actor(Actor):
     return self.action
 
 class FF_Actor(Actor):
-  def __init__(self, state_dim, action_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET', nonlinearity=F.relu):
+  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name='NOT SET', nonlinearity=F.relu, normc_init=True):
     super(FF_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
-    self.actor_layers += [nn.Linear(state_dim, hidden_size)]
-    for _ in range(hidden_layers-1):
-        self.actor_layers += [nn.Linear(hidden_size, hidden_size)]
-    self.network_out = nn.Linear(hidden_size, action_dim)
+    self.actor_layers += [nn.Linear(state_dim, layers[0])]
+    for i in range(len(layers)-1):
+        self.actor_layers += [nn.Linear(layers[i], layers[i+1])]
+    self.network_out = nn.Linear(layers[-1], action_dim)
 
     self.action = None
     self.action_dim = action_dim
     self.env_name = env_name
     self.nonlinearity = nonlinearity
 
-    self.initialize_parameters()
+    if normc_init:
+      self.initialize_parameters()
 
   def forward(self, state):
     x = state
@@ -66,14 +67,14 @@ class FF_Actor(Actor):
     return self.action
 
 class LSTM_Actor(Actor):
-  def __init__(self, input_dim, action_dim, hidden_size=64, hidden_layers=1, env_name='NOT SET', nonlinearity=torch.tanh):
+  def __init__(self, input_dim, action_dim, layers=(128, 128), env_name='NOT SET', nonlinearity=torch.tanh, normc_init=True):
     super(LSTM_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
-    self.actor_layers += [nn.LSTMCell(input_dim, hidden_size)]
-    for _ in range(hidden_layers-1):
-        self.actor_layers += [nn.LSTMCell(hidden_size, hidden_size)]
-    self.network_out = nn.Linear(hidden_size, action_dim)
+    self.actor_layers += [nn.LSTMCell(input_dim, layers[0])]
+    for i in range(hidden_layers-1):
+        self.actor_layers += [nn.LSTMCell(layers[i], layers[i+1])]
+    self.network_out = nn.Linear(layers[i-1], action_dim)
 
     self.action = None
     self.action_dim = action_dim
@@ -82,6 +83,9 @@ class LSTM_Actor(Actor):
     self.nonlinearity = nonlinearity
     
     self.is_recurrent = True
+
+    if normc_init:
+      self.initialize_parameters()
 
   def get_hidden_state(self):
     return self.hidden, self.cells

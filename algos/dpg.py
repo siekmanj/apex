@@ -170,7 +170,7 @@ def eval_policy(policy, env, evals=10, max_traj_len=1000):
 
   return eval_reward/evals
 
-def collect_experience(policy, env, replay_buffer, initial_state, steps, random_action=False, noise=0.2, do_trajectory=False, max_len=1000, normalize=True):
+def collect_experience(policy, env, replay_buffer, initial_state, steps, random_action=False, noise=0.2, do_trajectory=False, max_len=1000, normalize=False):
   with torch.no_grad():
     if normalize:
       state = policy.normalize_state(torch.Tensor(initial_state))

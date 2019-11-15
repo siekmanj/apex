@@ -88,7 +88,7 @@ class Critic(Net):
     return (r - self.welford_reward_mean) / torch.sqrt(self.welford_reward_mean_diff / self.welford_reward_n)
 
 class FF_Critic(Critic):
-  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name='NOT SET', normc_init=True):
+  def __init__(self, state_dim, action_dim, layers=(400, 300), env_name='NOT SET', normc_init=True):
     super(FF_Critic, self).__init__()
 
     self.critic_layers = nn.ModuleList()

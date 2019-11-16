@@ -38,7 +38,7 @@ class Linear_Actor(Actor):
     return self.action
 
 class FF_Actor(Actor):
-  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name='NOT SET', nonlinearity=F.relu, normc_init=True):
+  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name='NOT SET', nonlinearity=F.relu, normc_init=True, max_action=1):
     super(FF_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -51,6 +51,7 @@ class FF_Actor(Actor):
     self.action_dim = action_dim
     self.env_name = env_name
     self.nonlinearity = nonlinearity
+    self.max_action = max_action
 
     if normc_init:
       self.initialize_parameters()
@@ -67,7 +68,7 @@ class FF_Actor(Actor):
     return self.action
 
 class LSTM_Actor(Actor):
-  def __init__(self, input_dim, action_dim, layers=(128, 128), env_name='NOT SET', nonlinearity=torch.tanh, normc_init=True):
+  def __init__(self, input_dim, action_dim, layers=(128, 128), env_name='NOT SET', nonlinearity=torch.tanh, normc_init=True, max_action=1):
     super(LSTM_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -81,6 +82,7 @@ class LSTM_Actor(Actor):
     self.init_hidden_state()
     self.env_name = env_name
     self.nonlinearity = nonlinearity
+    self.max_action = max_action
     
     self.is_recurrent = True
 

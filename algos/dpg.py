@@ -162,7 +162,8 @@ def eval_policy(policy, env, evals=10, max_traj_len=1000):
       policy.init_hidden_state()
 
     while not done and timesteps < max_traj_len:
-      state = policy.normalize_state(state, update=False)
+      if hasattr(policy, 'normalize_state'):
+        state = policy.normalize_state(state, update=False)
       action = policy.forward(torch.Tensor(state)).detach().numpy()
       state, reward, done, _ = env.step(action)
       eval_reward += reward

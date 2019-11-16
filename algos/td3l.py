@@ -10,25 +10,22 @@ from algos.dpg import eval_policy, collect_experience
 from algos.dpg import ReplayBuffer
 
 class TD3():
-  def __init__(self, actor, q1, q2, a_lr, c_lr, discount=0.99, tau=0.001, center_reward=False, policy_noise=0.2, update_freq=2, noise_clip=0.5, normalize=False):
-    if actor.is_recurrent or q1.is_recurrent or q2.is_recurrent:
+  def __init__(self, actor, q, a_lr, c_lr, discount=0.99, tau=0.001, center_reward=False, policy_noise=0.2, update_freq=2, noise_clip=0.5, normalize=False):
+    if actor.is_recurrent:
       self.recurrent = True
     else:
       self.recurrent = False
 
     self.behavioral_actor  = actor
-    self.behavioral_q1 = q1
-    self.behavioral_q2 = q2
+    self.behavioral_q = q
 
     self.target_actor = copy.deepcopy(actor)
-    self.target_q1 = copy.deepcopy(q1)
-    self.target_q2 = copy.deepcopy(q2)
+    self.target_q = copy.deepcopy(q)
 
     self.soft_update(1.0)
 
     self.actor_optimizer  = torch.optim.Adam(self.behavioral_actor.parameters(), lr=a_lr)
-    self.q1_optimizer = torch.optim.Adam(self.behavioral_q1.parameters(), lr=c_lr, weight_decay=1e-2)
-    self.q2_optimizer = torch.optim.Adam(self.behavioral_q2.parameters(), lr=c_lr, weight_decay=1e-2)
+    self.q_optimizer = torch.optim.Adam(self.behavioral_q.parameters(), lr=c_lr, weight_decay=1e-2)
 
     self.discount   = discount
     self.tau        = tau
@@ -42,10 +39,7 @@ class TD3():
     self.n = 0
 
   def soft_update(self, tau):
-    for param, target_param in zip(self.behavioral_q1.parameters(), self.target_q1.parameters()):
-      target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
-
-    for param, target_param in zip(self.behavioral_q2.parameters(), self.target_q2.parameters()):
+    for param, target_param in zip(self.behavioral_q.parameters(), self.target_q.parameters()):
       target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
     for param, target_param in zip(self.behavioral_actor.parameters(), self.target_actor.parameters()):
@@ -57,52 +51,50 @@ class TD3():
     states, actions, next_states, rewards, not_dones, steps = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
 
     with torch.no_grad():
-      if self.normalize:
+      if self.normalize and hasattr(self.behavioral_actor, 'normalize_state'):
         states      = self.behavioral_actor.normalize_state(states, update=False)
         next_states = self.behavioral_actor.normalize_state(next_states, update=False)
 
       noise        = (torch.randn_like(actions) * self.policy_noise).clamp(-noise_clip, noise_clip)
       next_actions = (self.target_actor(next_states) + noise)
 
-      target_q1 = self.target_q1(next_states, next_actions)
-      target_q2 = self.target_q2(next_states, next_actions)
+      target_q1, target_q2 = self.target_q(next_states, next_actions)
 
       target_q = rewards + not_dones * self.discount * torch.min(target_q1, target_q2)
 
-    current_q1 = self.behavioral_q1(states, actions)
-    current_q2 = self.behavioral_q2(states, actions)
+    current_q1, current_q2 = self.behavioral_q(states, actions)
 
     critic_loss = F.mse_loss(current_q1, target_q) + F.mse_loss(current_q2, target_q)
 
-    self.q1_optimizer.zero_grad()
-    self.q2_optimizer.zero_grad()
+    self.q_optimizer.zero_grad()
 
     critic_loss.backward()
 
-    self.q1_optimizer.step()
-    self.q2_optimizer.step()
+    self.q_optimizer.step()
 
     if self.n % self.update_every == 0:
-      actor_loss = -self.behavioral_q1(states, self.behavioral_actor(states)).mean()
+      actor_loss = -self.behavioral_q.Q1(states, self.behavioral_actor(states)).mean()
 
       self.actor_optimizer.zero_grad()
       actor_loss.backward()
-
-      #if grad_clip is not None:
-      #  torch.nn.utils.clip_grad_norm_(self.behavioral_actor.parameters(), grad_clip)
 
       self.actor_optimizer.step()
       
       self.soft_update(self.tau)
 
-    return critic_loss.item(), steps
+      return critic_loss.item(), -actor_loss.item(), steps
+    else:
+      return critic_loss.item(), 0, steps
+
 
 def run_experiment(args):
   from time import time
 
   from rrl import env_factory, create_logger
-  from policies.critic import FF_Critic, LSTM_Critic
-  from policies.actor import FF_Actor, LSTM_Actor
+  #from policies.critic import LSTM_Critic, TD3Critic
+  #from policies.actor import FF_Actor, LSTM_Actor
+
+  from policies.lorenzo import Critic, Actor
 
   import locale, os
   locale.setlocale(locale.LC_ALL, '')
@@ -120,16 +112,10 @@ def run_experiment(args):
   obs_space = env.observation_space.shape[0]
   act_space = env.action_space.shape[0]
 
-  if args.recurrent:
-    actor = LSTM_Actor(obs_space, act_space, env_name=args.env_name, max_action=args.max_action)
-    Q1 = LSTM_Critic(obs_space, act_space, env_name=args.env_name)
-    Q2 = LSTM_Critic(obs_space, act_space, env_name=args.env_name)
-  else:
-    actor = FF_Actor(obs_space, act_space, env_name=args.env_name, max_action=args.max_action)
-    Q1 = FF_Critic(obs_space, act_space, env_name=args.env_name)
-    Q2 = FF_Critic(obs_space, act_space, env_name=args.env_name)
+  actor = Actor(obs_space, act_space, 1.25)
+  Q = Critic(obs_space, act_space)
 
-  algo = TD3(actor, Q1, Q2, args.a_lr, args.c_lr,
+  algo = TD3(actor, Q, args.a_lr, args.c_lr,
              discount=args.discount, 
              tau=args.tau, 
              center_reward=args.center_reward, 
@@ -138,7 +124,7 @@ def run_experiment(args):
              noise_clip=args.noise_clip,
              normalize=args.normalize)
 
-  replay_buff = ReplayBuffer(obs_space, act_space, int(args.timesteps))
+  replay_buff = ReplayBuffer(obs_space, act_space, args.timesteps)
 
   if algo.recurrent:
     print("Recurrent Twin-Delayed Deep Deterministic Policy Gradient:")
@@ -148,7 +134,7 @@ def run_experiment(args):
   print(args)
   print("\tenv:            {}".format(args.env_name))
   print("\tseed:           {}".format(args.seed))
-  print("\ttimesteps:      {:n}".format(int(args.timesteps)))
+  print("\ttimesteps:      {:n}".format(args.timesteps))
   print("\tactor_lr:       {}".format(args.a_lr))
   print("\tcritic_lr:      {}".format(args.c_lr))
   print("\tdiscount:       {}".format(args.discount))
@@ -176,6 +162,7 @@ def run_experiment(args):
   training_start = time()
   episode_start = time()
   episode_loss = 0
+  actor_loss = 0
   update_steps = 0
   best_reward = None
 
@@ -207,8 +194,9 @@ def run_experiment(args):
         num_updates = episode_timesteps
 
       for _ in range(num_updates):
-        u_loss, u_steps = algo.update_policy(replay_buff, args.batch_size, traj_len=args.traj_len)
+        u_loss, a_loss, u_steps = algo.update_policy(replay_buff, args.batch_size, traj_len=args.traj_len)
         episode_loss += u_loss / num_updates
+        actor_loss += a_loss / num_updates
         update_steps += u_steps
 
     if done:
@@ -217,6 +205,8 @@ def run_experiment(args):
       logger.add_scalar(args.env_name + ' episode length', episode_timesteps, iter)
       logger.add_scalar(args.env_name + ' episode reward', episode_reward, iter)
       logger.add_scalar(args.env_name + ' critic loss', episode_loss, iter)
+      if actor_loss > 0:
+        logger.add_scalar(args.env_name + ' actor loss', actor_loss, iter)
 
       completion = 1 - float(timesteps) / args.timesteps
       avg_sample_r = (time() - training_start)/timesteps

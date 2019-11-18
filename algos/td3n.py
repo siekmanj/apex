@@ -91,7 +91,7 @@ def run_experiment(args):
   from time import time
 
   from rrl import env_factory, create_logger
-  from policies.critic import LSTM_Critic, TD3Critic
+  from policies.critic import LSTM_Q, TD3Critic
   from policies.actor import FF_Actor, LSTM_Actor
 
   import locale, os
@@ -112,8 +112,8 @@ def run_experiment(args):
 
   if args.recurrent:
     actor = LSTM_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
-    Q1 = LSTM_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
-    Q2 = LSTM_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
+    Q1 = LSTM_Q(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
+    Q2 = LSTM_Q(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
   else:
     actor = FF_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
     Q = TD3Critic(obs_space, act_space, 256, 256)

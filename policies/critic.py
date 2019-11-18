@@ -9,6 +9,7 @@ def fanin_init(size, fanin=None):
     fanin = fanin or size[0]
     v = 1. / np.sqrt(fanin)
     return torch.Tensor(size).uniform_(-v, v)
+
 class TD3Critic(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_size1, hidden_size2, init_w=3e-3):
         super(TD3Critic, self).__init__()
@@ -87,15 +88,15 @@ class Critic(Net):
 
     return (r - self.welford_reward_mean) / torch.sqrt(self.welford_reward_mean_diff / self.welford_reward_n)
 
-class FF_Critic(Critic):
+class FF_Q(Critic):
   def __init__(self, state_dim, action_dim, layers=(400, 300), env_name='NOT SET', normc_init=True):
-    super(FF_Critic, self).__init__()
+    super(FF_Q, self).__init__()
 
     self.critic_layers = nn.ModuleList()
     self.critic_layers += [nn.Linear(state_dim + action_dim, layers[0])]
     for i in range(len(layers)-1):
         self.critic_layers += [nn.Linear(layers[i], layers[i+1])]
-    self.network_out = nn.Linear(layers[-1], action_dim)
+    self.network_out = nn.Linear(layers[-1], 1)
 
     self.env_name = env_name
 
@@ -103,27 +104,44 @@ class FF_Critic(Critic):
       self.initialize_parameters()
 
   def forward(self, state, action):
-    if len(state.size()) > 2:
-      x = torch.cat([state, action], 2)
-    elif len(state.size()) > 1:
-      x = torch.cat([state, action], 1)
-    else:
-      x = torch.cat([state, action])
+    x = torch.cat([state, action], len(state.size())-1)
 
     for idx, layer in enumerate(self.critic_layers):
       x = F.relu(layer(x))
 
     return self.network_out(x)
 
-class LSTM_Critic(Critic):
+class FF_V(Critic):
+  def __init__(self, state_dim, layers=(400, 300), env_name='NOT SET', normc_init=True):
+    super(FF_V, self).__init__()
+
+    self.critic_layers = nn.ModuleList()
+    self.critic_layers += [nn.Linear(state_dim, layers[0])]
+    for i in range(len(layers)-1):
+        self.critic_layers += [nn.Linear(layers[i], layers[i+1])]
+    self.network_out = nn.Linear(layers[-1], 1)
+
+    self.env_name = env_name
+
+    if normc_init:
+      self.initialize_parameters()
+
+  def forward(self, state):
+    x = state
+    for idx, layer in enumerate(self.critic_layers):
+      x = F.relu(layer(x))
+
+    return self.network_out(x)
+
+class LSTM_Q(Critic):
   def __init__(self, input_dim, action_dim, layers=(128, 128), env_name='NOT SET', normc_init=True):
-    super(LSTM_Critic, self).__init__()
+    super(LSTM_Q, self).__init__()
 
     self.critic_layers = nn.ModuleList()
     self.critic_layers += [nn.LSTMCell(input_dim + action_dim, layers[0])]
     for i in range(len(layers)-1):
         self.critic_layers += [nn.LSTMCell(layers[i], layers[i+1])]
-    self.network_out = nn.Linear(layers[-1], action_dim)
+    self.network_out = nn.Linear(layers[-1], 1)
 
     self.init_hidden_state()
 

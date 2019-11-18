@@ -284,16 +284,17 @@ if __name__ == "__main__":
 
     """
     from algos.ppo import run_experiment
-
-    parser.add_argument("--hidden_size",            default=256,   type=int)      # neurons in hidden layers
-    parser.add_argument("--layers",                 default=2,     type=int)      # number of hidden layres
     parser.add_argument("--timesteps",       "-t",  default=1e6,   type=int)      # number of timesteps to run experiment for
+    parser.add_argument("--env_name",               default='Cassie-v0', type=str)
     parser.add_argument("--traj_len",       "-tl",  default=1000,  type=int)      # max trajectory length for environment
 
     parser.add_argument('--discount',               default=0.99,  type=float)    # the discount factor
-    parser.add_argument("--a_lr",           "-alr", default=3e-4,  type=float)    # adam learning rate for critic
-    parser.add_argument("--c_lr",           "-clr", default=3e-4,  type=float)    # adam learning rate for actor
-    parser.add_argument("--batch_size",             default=256,    type=int)     # batch size for policy update
+    parser.add_argument("--a_lr",           "-alr", default=3e-4,  type=float)    # adam learning rate for actor
+    parser.add_argument("--c_lr",           "-clr", default=3e-4,  type=float)    # adam learning rate for critic
+    parser.add_argument("--a_eps",          "-aep", default=1e-5,  type=float)    # adam eps for actor
+    parser.add_argument("--c_eps",          "-cep", default=1e-5,  type=float)    # adam eps for critic
+    parser.add_argument("--batch_size",             default=256,   type=int)      # batch size for policy update
+    parser.add_argument("--epochs",                 default=5,     type=int)      # number of updates per iter
 
     parser.add_argument("--eval_every",             default=100,   type=int)      # how often to evaluate the trained policy
     parser.add_argument("--save_actor",             default=None, type=str)

@@ -199,7 +199,7 @@ def run_experiment(args):
   from time import time
 
   from rrl import env_factory, create_logger
-  from policies.critic import FF_Critic, LSTM_Critic
+  from policies.critic import FF_Q, LSTM_Q
   from policies.actor import FF_Actor, LSTM_Actor
 
   import locale, os
@@ -220,10 +220,10 @@ def run_experiment(args):
 
   if args.recurrent:
     actor = LSTM_Actor(obs_space, act_space, env_name=args.env_name)
-    critic = LSTM_Critic(obs_space, act_space, env_name=args.env_name)
+    critic = LSTM_Q(obs_space, act_space, env_name=args.env_name)
   else:
     actor = FF_Actor(obs_space, act_space, env_name=args.env_name)
-    critic = FF_Critic(obs_space, act_space, env_name=args.env_name)
+    critic = FF_Q(obs_space, act_space, env_name=args.env_name)
 
   algo = DPG(actor, critic, args.a_lr, args.c_lr, discount=args.discount, tau=args.tau, center_reward=args.center_reward, normalize=args.normalize)
 

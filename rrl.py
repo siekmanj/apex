@@ -293,6 +293,8 @@ if __name__ == "__main__":
     parser.add_argument("--c_lr",           "-clr", default=3e-4,  type=float)    # adam learning rate for critic
     parser.add_argument("--a_eps",          "-aep", default=1e-5,  type=float)    # adam eps for actor
     parser.add_argument("--c_eps",          "-cep", default=1e-5,  type=float)    # adam eps for critic
+    parser.add_argument("--entropy_coeff",          default=0.0,   type=float)
+    parser.add_argument("--grad_clip",              default=0.05,  type=float)
     parser.add_argument("--batch_size",             default=256,   type=int)      # batch size for policy update
     parser.add_argument("--epochs",                 default=5,     type=int)      # number of updates per iter
 

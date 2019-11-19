@@ -101,9 +101,11 @@ class FF_Stochastic_Actor(Actor):
     mu = torch.tanh(self.means(x))
 
     if self.learn_std:
-      sd = torch.tanh(self.stds(x))
+      sd = torch.relu(self.stds(x))
     else:
       sd = self.fixed_std
+
+    sd += 1e-1
     return mu, sd
 
   def forward(self, state, deterministic=True):
@@ -116,9 +118,9 @@ class FF_Stochastic_Actor(Actor):
 
     return self.action
 
-  def log_pdf(self, state):
-    mu, sd = _get_dist_params(state)
-    return torch.distributions.Normal(mu, sd).log_prob
+  def pdf(self, state):
+    mu, sd = self._get_dist_params(state)
+    return torch.distributions.Normal(mu, sd)
 
   def get_action(self):
     return self.action

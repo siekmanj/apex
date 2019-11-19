@@ -66,7 +66,7 @@ class Buffer:
     self.advantages = a
     self.advantage_calculated = True
 
-  def sample(self, batch_size=64, recurrent=False):
+  def sample(self, batch_size=128, recurrent=False):
     if not self.buffer_ready:
       self._finish_buffer()
 
@@ -111,8 +111,9 @@ class PPO:
 
         traj_len, done = 0, False
         while not done and traj_len < max_steps:
-          action = self.actor(state, deterministic=False).numpy()
-          value  = self.critic(state).numpy()
+          norm_state = self.actor.normalize_state(state)
+          action = self.actor(norm_state, deterministic=False).numpy()
+          value  = self.critic(norm_state).numpy()
 
           next_state, reward, done, _ = env.step(action)
 
@@ -128,12 +129,21 @@ class PPO:
       return [self.buffer.sample(batch_size=64, recurrent=self.recurrent) for _ in range(batches)], num_steps
 
   def update_policy(self, epochs, batch_size):
+    kl     = []
+    a_loss = []
+    c_loss = []
+    ratios = []
+    ent    = []
+    adv    = []
 
-    batches, timesteps = self.collect_experience(1000, epochs)
+    self.old_actor.load_state_dict(self.actor.state_dict())  # WAY faster than deepcopy
+
+    batches, timesteps = self.collect_experience(2000, epochs)
     for i, batch in enumerate(batches):
       states, actions, returns, advantages = batch
 
       with torch.no_grad():
+        states = self.actor.normalize_state(states, update=False)
         old_pdf       = self.old_actor.pdf(states)
         old_log_probs = old_pdf.log_prob(actions).sum(-1, keepdim=True)
 
@@ -161,14 +171,21 @@ class PPO:
       torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.grad_clip)
       self.critic_optim.step()
 
-      kl_div = kl_divergence(pdf, old_pdf).mean() 
-      print("epoch {:2d}) critic loss {:9.5f} | actor_loss {:9.5f} | entropy loss {:5.3f} | KL {:5.3f} | log_prob {:5.4f}".format(i, critic_loss.item(), actor_loss.item(), entropy_penalty, kl_div, log_probs.mean()))
-      if kl_div > 0.02:
-        print("Max KL reached, aborting update")
-        break
+      with torch.no_grad():
+        kl_div = kl_divergence(pdf, old_pdf).mean() 
+
+        kl     += [kl_div.numpy()]
+        a_loss += [actor_loss.item()]
+        c_loss += [critic_loss.item()]
+        ratios += [ratio.mean().numpy()]
+        ent    += [pdf.entropy().mean().numpy()]
+        adv    += [advantages.mean().numpy()]
+        if kl_div > 0.02:
+          print("Max KL reached, aborting update")
+          break
 
     self.buffer.clear()
-    return timesteps
+    return timesteps, np.mean(kl), np.mean(a_loss), np.mean(c_loss), np.mean(ratios), np.mean(ent), np.mean(adv)
 
 def eval_policy(policy, env, max_steps=400):
   sum_reward = 0
@@ -188,7 +205,10 @@ def eval_policy(policy, env, max_steps=400):
 def run_experiment(args):
   from policies import FF_Stochastic_Actor, FF_V
 
-  from rrl import env_factory
+  from rrl import env_factory, create_logger
+
+  import locale, os
+  locale.setlocale(locale.LC_ALL, '')
 
   env_fn = env_factory(args.env_name)
   
@@ -203,14 +223,36 @@ def run_experiment(args):
   algo = PPO(actor, critic, args, Buffer(discount=args.discount), env_fn)
 
   steps = 0
-  while steps < 10000: # Prenormalize
-    pass
+  prenormalize_steps = 10000
+  while steps < prenormalize_steps: # Prenormalize
+    state = torch.Tensor(eval_env.reset())
+    done = False
+    traj_len = 0
+    while not done and traj_len < 400:
+      state = actor.normalize_state(state)
+      action = actor(state, deterministic=False).numpy()
+      next_state, reward, done, _ = eval_env.step(action)
+      state = torch.Tensor(next_state)
+      traj_len += 1
+      steps += 1
+    print("Prenormalizing {:5d}/{:5d}".format(steps, prenormalize_steps), end="\r")
+  print()
 
+  # create a tensorboard logging object
+  logger = create_logger(args)
+
+  if args.save_actor is None:
+    args.save_actor = os.path.join(logger.dir, 'actor.pt')
+
+
+  i = 0
   while steps < args.timesteps:
-    algo.update_policy(args.epochs, args.batch_size)
-
+    timesteps, kl, a_loss, c_loss, ratio, entropy, adv = algo.update_policy(args.epochs, args.batch_size)
+    steps += timesteps
     with torch.no_grad():
-      print("Eval reward: {}".format(eval_policy(actor, eval_env)))
+      iter_eval = eval_policy(actor, eval_env)
+    print("iter {:2d}) return {:5.1f} | critic {:9.5f} | actor {:9.5f} | entropy {:5.3f} | KL {:5.3f} | r {:5.4f} | advantage {:5.4f} | {:n} of {:n}".format(i, iter_eval, c_loss, a_loss, entropy, kl, ratio, adv, steps, int(args.timesteps)))
+    i += 1
 
   exit(1)
 

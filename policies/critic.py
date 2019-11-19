@@ -89,7 +89,7 @@ class Critic(Net):
     return (r - self.welford_reward_mean) / torch.sqrt(self.welford_reward_mean_diff / self.welford_reward_n)
 
 class FF_Q(Critic):
-  def __init__(self, state_dim, action_dim, layers=(400, 300), env_name='NOT SET', normc_init=True):
+  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name='NOT SET', normc_init=True):
     super(FF_Q, self).__init__()
 
     self.critic_layers = nn.ModuleList()
@@ -112,7 +112,7 @@ class FF_Q(Critic):
     return self.network_out(x)
 
 class FF_V(Critic):
-  def __init__(self, state_dim, layers=(400, 300), env_name='NOT SET', normc_init=True):
+  def __init__(self, state_dim, layers=(256, 256), env_name='NOT SET', normc_init=True):
     super(FF_V, self).__init__()
 
     self.critic_layers = nn.ModuleList()

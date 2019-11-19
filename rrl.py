@@ -296,8 +296,8 @@ if __name__ == "__main__":
     parser.add_argument("--c_eps",          "-cep", default=1e-5,  type=float)    # adam eps for critic
     parser.add_argument("--entropy_coeff",          default=0.0,   type=float)
     parser.add_argument("--grad_clip",              default=0.05,  type=float)
-    parser.add_argument("--batch_size",             default=256,   type=int)      # batch size for policy update
-    parser.add_argument("--epochs",                 default=5,     type=int)      # number of updates per iter
+    parser.add_argument("--batch_size",             default=64,   type=int)      # batch size for policy update
+    parser.add_argument("--epochs",                 default=3,     type=int)      # number of updates per iter
 
     parser.add_argument("--eval_every",             default=100,   type=int)      # how often to evaluate the trained policy
     parser.add_argument("--save_actor",             default=None, type=str)

@@ -66,7 +66,7 @@ class Buffer:
     self.advantages = a
     self.advantage_calculated = True
 
-  def sample(self, batch_size=128, recurrent=False):
+  def sample(self, batch_size=64, recurrent=False):
     if not self.buffer_ready:
       self._finish_buffer()
 
@@ -138,7 +138,7 @@ class PPO:
 
     self.old_actor.load_state_dict(self.actor.state_dict())  # WAY faster than deepcopy
 
-    batches, timesteps = self.collect_experience(2000, epochs)
+    batches, timesteps = self.collect_experience(5096, epochs)
     for i, batch in enumerate(batches):
       states, actions, returns, advantages = batch
 
@@ -180,6 +180,7 @@ class PPO:
         ratios += [ratio.mean().numpy()]
         ent    += [pdf.entropy().mean().numpy()]
         adv    += [advantages.mean().numpy()]
+
         if kl_div > 0.02:
           print("Max KL reached, aborting update")
           break
@@ -252,6 +253,14 @@ def run_experiment(args):
     with torch.no_grad():
       iter_eval = eval_policy(actor, eval_env)
     print("iter {:2d}) return {:5.1f} | critic {:9.5f} | actor {:9.5f} | entropy {:5.3f} | KL {:5.3f} | r {:5.4f} | advantage {:5.4f} | {:n} of {:n}".format(i, iter_eval, c_loss, a_loss, entropy, kl, ratio, adv, steps, int(args.timesteps)))
+    logger.add_scalar(args.env_name + '/ppo/iteration_return', iter_eval, i)
+    logger.add_scalar(args.env_name + '/ppo/timestep_return', iter_eval, steps)
+    logger.add_scalar(args.env_name + '/ppo/critic_loss', c_loss, i)
+    logger.add_scalar(args.env_name + '/ppo/actor_loss', a_loss, i)
+    logger.add_scalar(args.env_name + '/ppo/entropy', entropy, i)
+    logger.add_scalar(args.env_name + '/ppo/advantage', adv, i)
+    logger.add_scalar(args.env_name + '/ppo/kl', kl, i)
+
     i += 1
 
   exit(1)

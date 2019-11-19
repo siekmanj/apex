@@ -260,6 +260,14 @@ def run_experiment(args):
     with torch.no_grad():
       iter_eval = eval_policy(actor, eval_env)
     print("iter {:2d}) return {:5.1f} | critic {:9.5f} | actor {:9.5f} | entropy {:5.3f} | KL {:5.3f} | r {:5.4f} | advantage {:5.4f} | {:n} of {:n}".format(i, iter_eval, c_loss, a_loss, entropy, kl, ratio, adv, steps, int(args.timesteps)))
+    logger.add_scalar(args.env_name + '/ppo/iteration_return', iter_eval, i)
+    logger.add_scalar(args.env_name + '/ppo/timestep_return', iter_eval, steps)
+    logger.add_scalar(args.env_name + '/ppo/critic_loss', c_loss, i)
+    logger.add_scalar(args.env_name + '/ppo/actor_loss', a_loss, i)
+    logger.add_scalar(args.env_name + '/ppo/entropy', entropy, i)
+    logger.add_scalar(args.env_name + '/ppo/advantage', adv, i)
+    logger.add_scalar(args.env_name + '/ppo/kl', kl, i)
+
     i += 1
 
   exit(1)

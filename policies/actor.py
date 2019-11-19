@@ -104,13 +104,13 @@ class FF_Stochastic_Actor(Actor):
         sd = torch.tanh(self.stds(x))
       else:
         sd = self.fixed_std
-      out = torch
-    else:
+      #out = torch
+    #else:
 
 
     return self.action
 
-  def pdf(self, state):
+  #def pdf(self, state):
 
   def get_action(self):
     return self.action

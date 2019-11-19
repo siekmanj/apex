@@ -69,7 +69,7 @@ class FF_Actor(Actor):
 
 class FF_Stochastic_Actor(Actor):
   def __init__(self, state_dim, action_dim, layers=(256, 256), env_name=None, nonlinearity=F.relu, normc_init=True, max_action=1, fixed_std=None):
-    super(FF_Actor, self).__init__()
+    super(FF_Stochastic_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
     self.actor_layers += [nn.Linear(state_dim, layers[0])]
@@ -79,10 +79,11 @@ class FF_Stochastic_Actor(Actor):
 
     if fixed_std is None:
       self.stds = nn.Linear(layers[-1], action_dim)
+      self.learn_std = True
     else:
       self.fixed_std = fixed_std
+      self.learn_std = False
 
-    self.learn_std = learn_std
     self.action = None
     self.action_dim = action_dim
     self.env_name = env_name
@@ -92,29 +93,35 @@ class FF_Stochastic_Actor(Actor):
     if normc_init:
       self.initialize_parameters()
 
-  def forward(self, state, deterministic=True):
+  def _get_dist_params(self, state):
     x = state
     for idx, layer in enumerate(self.actor_layers):
       x = self.nonlinearity(layer(x))
 
     mu = torch.tanh(self.means(x))
 
-    if not deterministic:
-      if self.learn_std:
-        sd = torch.tanh(self.stds(x))
-      else:
-        sd = self.fixed_std
-      out = torch
+    if self.learn_std:
+      sd = torch.tanh(self.stds(x))
     else:
+      sd = self.fixed_std
+    return mu, sd
 
+  def forward(self, state, deterministic=True):
+    mu, sd = self._get_dist_params(state)
+
+    if not deterministic:
+      self.action = torch.distributions.Normal(mu, sd).sample()
+    else:
+      self.action = mu
 
     return self.action
 
-  def pdf(self, state):
+  def log_pdf(self, state):
+    mu, sd = _get_dist_params(state)
+    return torch.distributions.Normal(mu, sd).log_prob
 
   def get_action(self):
     return self.action
-
 
 class LSTM_Actor(Actor):
   def __init__(self, input_dim, action_dim, layers=(128, 128), env_name='NOT SET', nonlinearity=torch.tanh, normc_init=True, max_action=1):

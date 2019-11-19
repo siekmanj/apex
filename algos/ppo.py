@@ -8,11 +8,12 @@ from copy import deepcopy
 
 class Buffer:
   def __init__(self, discount=0.99):
-    self.states  = []
-    self.actions = []
-    self.rewards = []
-    self.values  = []
-    self.returns = []
+    self.states     = []
+    self.actions    = []
+    self.rewards    = []
+    self.values     = []
+    self.returns    = []
+    self.advantages = []
 
     self.discount = discount
 
@@ -42,25 +43,45 @@ class Buffer:
     rewards = self.rewards[self.traj_idx[-2]:self.traj_idx[-1]]
     returns = []
 
+
     for r in reversed(rewards):
       R = self.discount * R + r
       returns += [R]
     returns.reverse()
 
     self.returns += returns
+    self.buffer_ready = False
+
+  def _finish_buffer(self):
+    self.states = torch.Tensor(self.states)
+    self.actions = torch.Tensor(self.actions)
+    self.rewards = torch.Tensor(self.rewards)
+    self.returns = torch.Tensor(self.returns)
+    self.values = torch.Tensor(self.values)
+        
+    a = self.returns - self.values
+    a = (a - a.mean()) / (a.std() + 1e-4)
+    self.advantages = a
+    self.advantage_calculated = True
 
   def sample(self, batch_size=64, recurrent=False):
+    if not self.buffer_ready:
+      print("Calculating advantage!")
+      self._finish_buffer()
+
     if recurrent:
       raise NotImplementedError
     else:
       idxs = np.random.randint(0, self.size-1, size=batch_size)
       print(np.max(idxs), len(self.returns), len(self.states))
-      states  = [self.states[i]  for i in idxs]
-      actions = [self.actions[i] for i in idxs]
-      rewards = [self.rewards[i] for i in idxs]
-      values  = [self.values[i]  for i in idxs]
-      returns = [self.returns[i] for i in idxs]
-      return states, actions, rewards, values, returns
+
+      states     = [self.states[i]  for i in idxs]
+      actions    = [self.actions[i] for i in idxs]
+      returns    = [self.returns[i] for i in idxs]
+      advantages = [self.advantages[i] for i in idxs]
+      #rewards = [self.rewards[i] for i in idxs]
+      #values  = [self.values[i]  for i in idxs]
+      return states, actions, returns, advantages
     
       
 class PPO:
@@ -109,7 +130,17 @@ class PPO:
 
     batches, timesteps = self.collect_experience(500, epochs)
     for batch in batches:
-      states, actions, rewards, values, returns = batch
+      print("BATCH!")
+      states, actions, returns, advantages = batch
+
+      with torch.no_grad():
+        old_log_probs = self.old_actor.log_pdf(actions)
+      log_probs = self.actor.log_pdf(actions)
+
+      ratio = (log_probs - old_log_probs).exp()
+      print(ratio)
+
+      
 
     return timesteps
 
@@ -123,7 +154,7 @@ def run_experiment(args):
   state_dim = env_fn().observation_space.shape[0]
   action_dim = env_fn().action_space.shape[0]
 
-  actor = FF_Stochastic_Actor(state_dim, action_dim, env_name=args.env_name, learn_std=True)
+  actor = FF_Stochastic_Actor(state_dim, action_dim, env_name=args.env_name)
   critic = FF_V(state_dim)
 
   algo = PPO(actor, critic, args, Buffer(discount=args.discount), env_fn)

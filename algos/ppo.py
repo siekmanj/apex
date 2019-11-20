@@ -80,7 +80,7 @@ class Buffer:
       sampler = BatchSampler(random_indices, batch_size, drop_last=True)
 
       for i, idxs in enumerate(sampler):
-        print("Yielding batch {} of {}".format(i, len(sampler)))
+        #print("Yielding batch {} of {}".format(i, len(sampler)))
 
         states     = self.states[idxs]
         actions    = self.actions[idxs] 
@@ -106,6 +106,7 @@ class PPO:
     self.entropy_coeff = args.entropy_coeff
     self.grad_clip = args.grad_clip
 
+  #@ray.remote
   def collect_experience(self, n, batches, max_steps=400):
     env = self.env
     with torch.no_grad():
@@ -141,8 +142,10 @@ class PPO:
     ratios = []
     ent    = []
     adv    = []
+    a_p_n  = []
+    c_p_n  = []
 
-    timesteps = self.collect_experience(2000, epochs)
+    timesteps = self.collect_experience(5096, epochs)
     self.old_actor.load_state_dict(self.actor.state_dict())  # WAY faster than deepcopy
 
     for epoch in range(epochs):
@@ -165,6 +168,7 @@ class PPO:
 
         values = self.critic(states)
         critic_loss = F.mse_loss(values, returns)
+        #critic_loss = 0.5 * (returns - values).pow(2).mean()
 
         entropy_penalty = -self.entropy_coeff * pdf.entropy().mean()
 
@@ -178,6 +182,9 @@ class PPO:
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.grad_clip)
         self.critic_optim.step()
 
+        actor_norm = np.sqrt(np.mean(np.square(np.concatenate([p.grad.data.numpy().flatten() for p in self.actor.parameters() if p.grad is not None]))))
+        critic_norm = np.sqrt(np.mean(np.square(np.concatenate([p.grad.data.numpy().flatten() for p in self.critic.parameters() if p.grad is not None]))))
+
         with torch.no_grad():
 
           a_loss += [actor_loss.item()]
@@ -185,15 +192,17 @@ class PPO:
           ratios += [ratio.mean().numpy()]
           ent    += [pdf.entropy().mean().numpy()]
           adv    += [advantages.mean().numpy()]
+          a_p_n  += [actor_norm]
+          c_p_n  += [critic_norm]
 
       kl_div = kl_divergence(pdf, old_pdf).mean() 
       kl     += [kl_div.detach().numpy()]
-      if kl_div > 0.02:
+      if kl_div > 0.1:
         print("Max KL reached, aborting update")
         break
 
     self.buffer.clear()
-    return timesteps, np.mean(kl), np.mean(a_loss), np.mean(c_loss), np.mean(ratios), np.mean(ent), np.mean(adv)
+    return timesteps, np.mean(kl), np.mean(a_loss), np.mean(c_loss), np.mean(ratios), np.mean(ent), np.mean(adv), np.mean(a_p_n), np.mean(c_p_n)
 
 def eval_policy(policy, env, max_steps=400):
   sum_reward = 0
@@ -255,7 +264,7 @@ def run_experiment(args):
   i = 0
   steps = 0
   while steps < args.timesteps:
-    timesteps, kl, a_loss, c_loss, ratio, entropy, adv = algo.update_policy(args.epochs, args.batch_size)
+    timesteps, kl, a_loss, c_loss, ratio, entropy, adv, a_norm, c_norm = algo.update_policy(args.epochs, args.batch_size)
     steps += timesteps
     with torch.no_grad():
       iter_eval = eval_policy(actor, eval_env)
@@ -266,6 +275,8 @@ def run_experiment(args):
     logger.add_scalar(args.env_name + '/ppo/actor_loss', a_loss, i)
     logger.add_scalar(args.env_name + '/ppo/entropy', entropy, i)
     logger.add_scalar(args.env_name + '/ppo/advantage', adv, i)
+    logger.add_scalar(args.env_name + '/ppo/actor_param_norm', a_norm, i)
+    logger.add_scalar(args.env_name + '/ppo/critic_param_norm', c_norm, i)
     logger.add_scalar(args.env_name + '/ppo/kl', kl, i)
 
     i += 1

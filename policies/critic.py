@@ -127,6 +127,10 @@ class FF_V(Critic):
       self.initialize_parameters()
 
   def forward(self, state):
+
+    if hasattr(self, 'obs_mean') and hasattr(self, 'obs_std'):
+      state = (state - self.obs_mean) / self.obs_std
+
     x = state
     for idx, layer in enumerate(self.critic_layers):
       x = F.relu(layer(x))

@@ -33,6 +33,8 @@ class Buffer:
     self.buffer_ready = False
 
   def push(self, state, action, reward, value, done=False):
+    #print("Storing {} {} {} {}".format(state.shape, action.shape, reward.shape, value.shape))
+
     self.states  += [state]
     self.actions += [action]
     self.rewards += [reward]
@@ -75,7 +77,7 @@ class Buffer:
     if recurrent:
       raise NotImplementedError
     else:
-      print("Creating new random indices!")
+      #print("Creating new random indices!")
       random_indices = SubsetRandomSampler(range(self.size))
       sampler = BatchSampler(random_indices, batch_size, drop_last=True)
 
@@ -124,6 +126,8 @@ class PPO:
 
           next_state, reward, done, _ = env.step(action)
 
+          reward = np.array([reward])
+
           self.buffer.push(state.numpy(), action, reward, value)
 
           state = torch.Tensor(next_state)
@@ -145,13 +149,14 @@ class PPO:
     a_p_n  = []
     c_p_n  = []
 
-    timesteps = self.collect_experience(5096, epochs)
+    timesteps = self.collect_experience(2000, epochs)
     self.old_actor.load_state_dict(self.actor.state_dict())  # WAY faster than deepcopy
 
     for epoch in range(epochs):
       for i, batch in enumerate(self.buffer.sample(batch_size)):
         states, actions, returns, advantages = batch
 
+        """
         with torch.no_grad():
           states = self.actor.normalize_state(states, update=False)
           old_pdf       = self.old_actor.pdf(states)
@@ -181,9 +186,61 @@ class PPO:
         critic_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.grad_clip)
         self.critic_optim.step()
+        """
+        obs_batch = states
+        action_batch = actions
+        advantage_batch = advantages
+        return_batch = returns
+        # TODO, move this outside loop?
+        with torch.no_grad():
+          obs_batch = self.actor.normalize_state(obs_batch, update=False)
+          old_pdf = self.old_actor.pdf(obs_batch)
+          old_log_probs = old_pdf.log_prob(action_batch).sum(-1, keepdim=True)
+
+        values = self.critic(obs_batch)
+        pdf = self.actor.pdf(obs_batch)
+        
+        log_probs = pdf.log_prob(action_batch).sum(-1, keepdim=True)
+        
+        ratio = (log_probs - old_log_probs).exp()
+
+        cpi_loss = ratio * advantage_batch
+        clip_loss = ratio.clamp(0.8, 1.2) * advantage_batch
+        actor_loss = -torch.min(cpi_loss, clip_loss).mean()
+
+        if not torch.isfinite(actor_loss) or actor_loss.item() > 100:
+          print("NON FINITE ACTR LOSS {}, old logs {}, logs {}, adv {}".format(actor_loss, old_log_probs, log_probs, advantage_batch))
+          print("ratio {}, cpi {}, clip {}".format(ratio, cpi_loss, clip_loss))
+          exit(1)
+
+        critic_loss = 0.5 * (return_batch - values).pow(2).mean()
+
+        entropy_penalty = -self.entropy_coeff * pdf.entropy().mean()
+
+        # TODO: add ability to optimize critic and actor seperately, with different learning rates
+
+        self.actor_optim.zero_grad()
+        (actor_loss + entropy_penalty).backward()
+
+        # Clip the gradient norm to prevent "unlucky" minibatches from 
+        # causing pathalogical updates
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.grad_clip)
+        self.actor_optim.step()
+
+        self.critic_optim.zero_grad()
+        critic_loss.backward()
+
+        # Clip the gradient norm to prevent "unlucky" minibatches from 
+        # causing pathalogical updates
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.grad_clip)
+        self.critic_optim.step()
+
 
         actor_norm = np.sqrt(np.mean(np.square(np.concatenate([p.grad.data.numpy().flatten() for p in self.actor.parameters() if p.grad is not None]))))
         critic_norm = np.sqrt(np.mean(np.square(np.concatenate([p.grad.data.numpy().flatten() for p in self.critic.parameters() if p.grad is not None]))))
+
+
+        print("BATCH {} RATIO {} CLOSS {} ALOSS {} ENTROPY {}".format(i, ratio.mean(), critic_loss.mean(), actor_loss.mean(), pdf.entropy().mean()))
 
         with torch.no_grad():
 
@@ -268,13 +325,12 @@ def run_experiment(args):
     steps += timesteps
     with torch.no_grad():
       iter_eval = eval_policy(actor, eval_env)
-    print("iter {:2d}) return {:5.1f} | critic {:9.5f} | actor {:9.5f} | entropy {:5.3f} | KL {:5.3f} | r {:5.4f} | advantage {:5.4f} | {:n} of {:n}".format(i, iter_eval, c_loss, a_loss, entropy, kl, ratio, adv, steps, int(args.timesteps)))
+    print("iter {:2d}) return {:5.1f} | critic {:9.5f} | actor {:9.5f} | entropy {:5.3f} | KL {:5.3f} | r {:5.4f} | {:n} of {:n}".format(i, iter_eval, c_loss, a_loss, entropy, kl, ratio, steps, int(args.timesteps)))
     logger.add_scalar(args.env_name + '/ppo/iteration_return', iter_eval, i)
     logger.add_scalar(args.env_name + '/ppo/timestep_return', iter_eval, steps)
     logger.add_scalar(args.env_name + '/ppo/critic_loss', c_loss, i)
     logger.add_scalar(args.env_name + '/ppo/actor_loss', a_loss, i)
     logger.add_scalar(args.env_name + '/ppo/entropy', entropy, i)
-    logger.add_scalar(args.env_name + '/ppo/advantage', adv, i)
     logger.add_scalar(args.env_name + '/ppo/actor_param_norm', a_norm, i)
     logger.add_scalar(args.env_name + '/ppo/critic_param_norm', c_norm, i)
     logger.add_scalar(args.env_name + '/ppo/kl', kl, i)

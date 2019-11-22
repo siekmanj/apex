@@ -38,7 +38,7 @@ class Linear_Actor(Actor):
     return self.action
 
 class FF_Actor(Actor):
-  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name='NOT SET', nonlinearity=F.relu, normc_init=True, max_action=1):
+  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name='NOT SET', nonlinearity=F.relu, normc_init=False, max_action=1):
     super(FF_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -68,7 +68,7 @@ class FF_Actor(Actor):
     return self.action
 
 class FF_Stochastic_Actor(Actor):
-  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name=None, nonlinearity=F.relu, normc_init=True, max_action=1, fixed_std=None):
+  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name=None, nonlinearity=F.relu, normc_init=False, max_action=1, fixed_std=None):
     super(FF_Stochastic_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -94,6 +94,10 @@ class FF_Stochastic_Actor(Actor):
       self.initialize_parameters()
 
   def _get_dist_params(self, state):
+
+    if hasattr(self, 'obs_mean') and hasattr(self, 'obs_std'):
+      state = (state - self.obs_mean) / self.obs_std
+
     x = state
     for idx, layer in enumerate(self.actor_layers):
       x = self.nonlinearity(layer(x))
@@ -101,11 +105,11 @@ class FF_Stochastic_Actor(Actor):
     mu = torch.tanh(self.means(x))
 
     if self.learn_std:
-      sd = torch.relu(self.stds(x))
+      sd = torch.relu(self.stds(x)) + 1e-3
     else:
       sd = self.fixed_std
 
-    sd += 1e-1
+    #print("RETURNED MEAN {}, SD {}".format(mu, sd))
     return mu, sd
 
   def forward(self, state, deterministic=True):
@@ -126,7 +130,7 @@ class FF_Stochastic_Actor(Actor):
     return self.action
 
 class LSTM_Actor(Actor):
-  def __init__(self, input_dim, action_dim, layers=(128, 128), env_name='NOT SET', nonlinearity=torch.tanh, normc_init=True, max_action=1):
+  def __init__(self, input_dim, action_dim, layers=(128, 128), env_name='NOT SET', nonlinearity=torch.tanh, normc_init=False, max_action=1):
     super(LSTM_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()

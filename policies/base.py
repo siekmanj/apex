@@ -63,3 +63,6 @@ class Net(nn.Module):
   
   def initialize_parameters(self):
     self.apply(normc_fn)
+    if hasattr(self, 'network_out'):
+      self.network_out.weight.data.mul_(0.01)
+

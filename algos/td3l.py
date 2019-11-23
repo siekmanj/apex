@@ -51,7 +51,7 @@ class TD3():
     states, actions, next_states, rewards, not_dones, steps = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
 
     with torch.no_grad():
-      if self.normalize:
+      if self.normalize and hasattr(self.behavioral_actor, 'normalize_state'):
         states      = self.behavioral_actor.normalize_state(states, update=False)
         next_states = self.behavioral_actor.normalize_state(next_states, update=False)
 
@@ -91,8 +91,10 @@ def run_experiment(args):
   from time import time
 
   from rrl import env_factory, create_logger
-  from policies.critic import LSTM_Q, TD3Critic
-  from policies.actor import FF_Actor, LSTM_Actor
+  #from policies.critic import LSTM_Critic, TD3Critic
+  #from policies.actor import FF_Actor, LSTM_Actor
+
+  from policies.lorenzo import Critic, Actor
 
   import locale, os
   locale.setlocale(locale.LC_ALL, '')
@@ -110,13 +112,8 @@ def run_experiment(args):
   obs_space = env.observation_space.shape[0]
   act_space = env.action_space.shape[0]
 
-  if args.recurrent:
-    actor = LSTM_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
-    Q1 = LSTM_Q(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
-    Q2 = LSTM_Q(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
-  else:
-    actor = FF_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
-    Q = TD3Critic(obs_space, act_space, 256, 256)
+  actor = Actor(obs_space, act_space, 1.25)
+  Q = Critic(obs_space, act_space)
 
   algo = TD3(actor, Q, args.a_lr, args.c_lr,
              discount=args.discount, 

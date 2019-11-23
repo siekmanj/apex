@@ -101,7 +101,7 @@ def run_experiment(args):
   from time import time
 
   from rrl import env_factory, create_logger
-  from policies.critic import FF_Critic, LSTM_Critic
+  from policies.critic import FF_Q, LSTM_Q
   from policies.actor import FF_Actor, LSTM_Actor
 
   import locale, os
@@ -121,13 +121,13 @@ def run_experiment(args):
   act_space = env.action_space.shape[0]
 
   if args.recurrent:
-    actor = LSTM_Actor(obs_space, act_space, env_name=args.env_name)
-    Q1 = LSTM_Critic(obs_space, act_space, env_name=args.env_name)
-    Q2 = LSTM_Critic(obs_space, act_space, env_name=args.env_name)
+    actor = LSTM_Actor(obs_space, act_space, env_name=args.env_name, max_action=args.max_action)
+    Q1 = LSTM_Q(obs_space, act_space, env_name=args.env_name)
+    Q2 = LSTM_Q(obs_space, act_space, env_name=args.env_name)
   else:
-    actor = FF_Actor(obs_space, act_space, env_name=args.env_name)
-    Q1 = FF_Critic(obs_space, act_space, env_name=args.env_name)
-    Q2 = FF_Critic(obs_space, act_space, env_name=args.env_name)
+    actor = FF_Actor(obs_space, act_space, env_name=args.env_name, max_action=args.max_action)
+    Q1 = FF_Q(obs_space, act_space, env_name=args.env_name)
+    Q2 = FF_Q(obs_space, act_space, env_name=args.env_name)
 
   algo = TD3(actor, Q1, Q2, args.a_lr, args.c_lr,
              discount=args.discount, 
@@ -138,7 +138,7 @@ def run_experiment(args):
              noise_clip=args.noise_clip,
              normalize=args.normalize)
 
-  replay_buff = ReplayBuffer(obs_space, act_space, args.timesteps)
+  replay_buff = ReplayBuffer(obs_space, act_space, int(args.timesteps))
 
   if algo.recurrent:
     print("Recurrent Twin-Delayed Deep Deterministic Policy Gradient:")
@@ -148,7 +148,7 @@ def run_experiment(args):
   print(args)
   print("\tenv:            {}".format(args.env_name))
   print("\tseed:           {}".format(args.seed))
-  print("\ttimesteps:      {:n}".format(args.timesteps))
+  print("\ttimesteps:      {:n}".format(int(args.timesteps)))
   print("\tactor_lr:       {}".format(args.a_lr))
   print("\tcritic_lr:      {}".format(args.c_lr))
   print("\tdiscount:       {}".format(args.discount))
@@ -168,9 +168,6 @@ def run_experiment(args):
 
   if args.save_actor is None:
     args.save_actor = os.path.join(logger.dir, 'actor.pt')
-
-  #if args.save_critic is None:
-  #  args.save_critic = os.path.join(logger.dir, 'critic.pt')
 
   # Keep track of some statistics for each episode
   training_start = time()

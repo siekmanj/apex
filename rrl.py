@@ -242,15 +242,16 @@ if __name__ == "__main__":
 
     """
     from algos.td3 import run_experiment
-    parser.add_argument("--timesteps",       "-t",  default=1e6,   type=int)      # number of timesteps in replay buffer
+    parser.add_argument("--timesteps",       "-t",  default=1e6,   type=float)    # number of timesteps in replay buffer
     parser.add_argument("--start_timesteps",        default=1e4,   type=int)      # number of timesteps to generate random actions for
     parser.add_argument("--load_actor",             default=None,  type=str)      # load an actor from a .pt file
     parser.add_argument("--load_critic1",           default=None,  type=str)      # load a critic from a .pt file
     parser.add_argument("--load_critic2",           default=None,  type=str)      # load a critic from a .pt file
     parser.add_argument('--discount',               default=0.99,  type=float)    # the discount factor
     parser.add_argument('--expl_noise',             default=0.1,   type=float)    # random noise used for exploration
-    parser.add_argument('--policy_noise',           default=0.2,   type=float)    # random noise used for exploration
-    parser.add_argument('--noise_clip',             default=0.5,   type=float)    # random noise used for exploration
+    parser.add_argument('--max_action',             default=1.0,   type=float)    # 
+    parser.add_argument('--policy_noise',           default=0.2,   type=float)    # 
+    parser.add_argument('--noise_clip',             default=0.5,   type=float)    # 
     parser.add_argument('--tau',                    default=0.005, type=float)    # update factor for target networks
     parser.add_argument("--a_lr",           "-alr", default=3e-4,  type=float)    # adam learning rate for critic
     parser.add_argument("--c_lr",           "-clr", default=3e-4,  type=float)    # adam learning rate for actor
@@ -276,6 +277,7 @@ if __name__ == "__main__":
     args.recurrent = recurrent
 
     run_experiment(args)
+
   elif sys.argv[1] == 'ppo':
     sys.argv.remove(sys.argv[1])
     """
@@ -283,20 +285,25 @@ if __name__ == "__main__":
 
     """
     from algos.ppo import run_experiment
+    parser.add_argument("--seed",                   default=0,           type=int)      # number of timesteps to run experiment for
+    parser.add_argument("--timesteps",       "-t",  default=1e6,         type=int)      # number of timesteps to run experiment for
+    parser.add_argument("--env_name",               default='Cassie-v0', type=str)
+    parser.add_argument("--traj_len",       "-tl",  default=400,         type=int)      # max trajectory length for environment
+    parser.add_argument("--prenormalize_steps",     default=10000,       type=int)      
+    parser.add_argument("--num_steps",              default=1000,        type=int)      
 
-    parser.add_argument("--hidden_size",            default=256,   type=int)      # neurons in hidden layers
-    parser.add_argument("--layers",                 default=2,     type=int)      # number of hidden layres
-    parser.add_argument("--timesteps",       "-t",  default=1e6,   type=int)      # number of timesteps to run experiment for
-    parser.add_argument("--traj_len",       "-tl",  default=1000,  type=int)      # max trajectory length for environment
+    parser.add_argument('--discount',               default=0.99,        type=float)    # the discount factor
+    parser.add_argument("--a_lr",           "-alr", default=1e-4,        type=float)    # adam learning rate for actor
+    parser.add_argument("--c_lr",           "-clr", default=5e-4,        type=float)    # adam learning rate for critic
+    parser.add_argument("--eps",            "-ep",  default=1e-5,        type=float)    # adam eps
+    parser.add_argument("--entropy_coeff",          default=0.0,         type=float)
+    parser.add_argument("--grad_clip",              default=0.05,        type=float)
+    parser.add_argument("--batch_size",             default=64,          type=int)      # batch size for policy update
+    parser.add_argument("--epochs",                 default=5,           type=int)      # number of updates per iter
 
-    parser.add_argument('--discount',               default=0.99,  type=float)    # the discount factor
-    parser.add_argument("--a_lr",           "-alr", default=3e-4,  type=float)    # adam learning rate for critic
-    parser.add_argument("--c_lr",           "-clr", default=3e-4,  type=float)    # adam learning rate for actor
-    parser.add_argument("--batch_size",             default=256,    type=int)     # batch size for policy update
-
-    parser.add_argument("--eval_every",             default=100,   type=int)      # how often to evaluate the trained policy
-    parser.add_argument("--save_actor",             default=None, type=str)
-    parser.add_argument("--save_critics",           default=None, type=str)
+    parser.add_argument("--save_actor",             default=None,        type=str)
+    parser.add_argument("--save_critic",            default=None,        type=str)
+    parser.add_argument("--logdir",                 default="./logs/ppo/", type=str)
     args = parser.parse_args()
 
     run_experiment(args)

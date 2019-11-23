@@ -1,14 +1,24 @@
+"""Proximal Policy Optimization (clip objective)."""
+from copy import deepcopy
+
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
-
-from torch.distributions import kl_divergence
+import torch.optim as optim
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
+from torch.distributions import kl_divergence
+
+import time
 
 import numpy as np
+import os
 
-from copy import deepcopy
+import ray
+
+PEDRO = False
+
+from policies.critic import Critic, FF_V
+from policies.actor import Actor, FF_Stochastic_Actor
 
 class Buffer:
   def __init__(self, discount=0.99):
@@ -27,14 +37,15 @@ class Buffer:
     self.returns    = []
     self.advantages = []
 
+    self.ep_returns = [] # for logging
+    self.ep_lens = [] # for logging
+
     self.size = 0
 
     self.traj_idx = [0]
     self.buffer_ready = False
 
   def push(self, state, action, reward, value, done=False):
-    #print("Storing {} {} {} {}".format(state.shape, action.shape, reward.shape, value.shape))
-
     self.states  += [state]
     self.actions += [action]
     self.rewards += [reward]
@@ -43,20 +54,27 @@ class Buffer:
     self.size += 1
 
   def end_trajectory(self, terminal_value=0):
+    if terminal_value is None:
+        terminal_value = np.zeros(shape=(1,))
 
     self.traj_idx += [self.size]
-
     rewards = self.rewards[self.traj_idx[-2]:self.traj_idx[-1]]
+
     returns = []
 
-    R = terminal_value
-    for r in reversed(rewards):
-      R = self.discount * R + r
-      returns += [R]
-    returns.reverse()
+    R = terminal_value.squeeze(0).copy() # Avoid copy?
+    for reward in reversed(rewards):
+        R = self.discount * R + reward
+        returns.insert(0, R) # TODO: self.returns.insert(self.path_idx, R) ? 
+                             # also technically O(k^2), may be worth just reversing list
+                             # BUG? This is adding copies of R by reference (?)
 
     self.returns += returns
-    self.buffer_ready = False
+
+    self.ep_returns += [np.sum(rewards)]
+    self.ep_lens    += [len(rewards)]
+
+    #self.path_idx = self.ptr
 
   def _finish_buffer(self):
     self.states  = torch.Tensor(self.states)
@@ -77,12 +95,10 @@ class Buffer:
     if recurrent:
       raise NotImplementedError
     else:
-      #print("Creating new random indices!")
       random_indices = SubsetRandomSampler(range(self.size))
       sampler = BatchSampler(random_indices, batch_size, drop_last=True)
 
       for i, idxs in enumerate(sampler):
-        #print("Yielding batch {} of {}".format(i, len(sampler)))
 
         states     = self.states[idxs]
         actions    = self.actions[idxs] 
@@ -90,253 +106,196 @@ class Buffer:
         advantages = self.advantages[idxs]
 
         yield states, actions, returns, advantages
-      
+
 class PPO:
-  def __init__(self, actor, critic, args, buff, env_fn):
-    self.actor = actor
-    self.critic = critic
+    def __init__(self, actor, critic, env_fn, discount=0.99, entropy_coeff=0.0, a_lr=1e-4, c_lr=1e-4, eps=1e-5, grad_clip = 0.05):
 
-    self.old_actor = deepcopy(actor)
-    self.old_critic = deepcopy(critic)
-    self.buffer = buff
-    self.env = env_fn()
+      self.actor = actor
+      self.old_actor = deepcopy(actor)
+      self.critic = critic
 
-    self.actor_optim  = optim.Adam(actor.parameters(), lr=args.a_lr, eps=args.a_eps)
-    self.critic_optim = optim.Adam(critic.parameters(), lr=args.c_lr, eps=args.c_eps)
+      self.actor_optim = optim.Adam(self.actor.parameters(), lr=a_lr, eps=eps)
+      self.critic_optim = optim.Adam(self.critic.parameters(), lr=c_lr, eps=eps)
 
-    self.recurrent = False
-    self.entropy_coeff = args.entropy_coeff
-    self.grad_clip = args.grad_clip
+      self.env_fn = env_fn
+      self.discount = discount
+      self.entropy_coeff = entropy_coeff
+      self.grad_clip = grad_clip
 
-  #@ray.remote
-  def collect_experience(self, n, batches, max_steps=400):
-    env = self.env
-    with torch.no_grad():
+    def update_policy(self, states, actions, returns, advantages):
+      with torch.no_grad():
+        states = self.actor.normalize_state(states, update=False)
+        old_pdf = self.old_actor.pdf(states)
+        old_log_probs = old_pdf.log_prob(actions).sum(-1, keepdim=True)
 
-      num_steps = 0
-      while num_steps < n:
+      values = self.critic(states)
+      pdf = self.actor.pdf(states)
+      
+      log_probs = pdf.log_prob(actions).sum(-1, keepdim=True)
+      
+      ratio = (log_probs - old_log_probs).exp()
 
-        state = torch.Tensor(env.reset())
+      cpi_loss = ratio * advantages
+      clip_loss = ratio.clamp(0.8, 1.2) * advantages
+      actor_loss = -torch.min(cpi_loss, clip_loss).mean()
 
-        traj_len, done = 0, False
-        while not done and traj_len < max_steps:
-          norm_state = self.actor.normalize_state(state)
-          action = self.actor(norm_state, deterministic=False).numpy()
-          value  = self.critic(norm_state).numpy()
+      critic_loss = 0.5 * (returns - values).pow(2).mean()
 
-          next_state, reward, done, _ = env.step(action)
+      entropy_penalty = -self.entropy_coeff * pdf.entropy().mean()
 
-          reward = np.array([reward])
+      self.actor_optim.zero_grad()
+      self.critic_optim.zero_grad()
 
-          self.buffer.push(state.numpy(), action, reward, value)
+      (actor_loss + entropy_penalty).backward()
+      critic_loss.backward()
 
-          state = torch.Tensor(next_state)
-          traj_len += 1
-        
-        num_steps += traj_len
-        value = self.critic(state)
-        self.buffer.end_trajectory(terminal_value=(not done) * value.numpy())
+      torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.grad_clip)
+      torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.grad_clip)
+      self.actor_optim.step()
+      self.critic_optim.step()
 
-      return num_steps
-
-  def update_policy(self, epochs, batch_size):
-    kl     = []
-    a_loss = []
-    c_loss = []
-    ratios = []
-    ent    = []
-    adv    = []
-    a_p_n  = []
-    c_p_n  = []
-
-    timesteps = self.collect_experience(2000, epochs)
-    self.old_actor.load_state_dict(self.actor.state_dict())  # WAY faster than deepcopy
-
-    for epoch in range(epochs):
-      for i, batch in enumerate(self.buffer.sample(batch_size)):
-        states, actions, returns, advantages = batch
-
-        """
-        with torch.no_grad():
-          states = self.actor.normalize_state(states, update=False)
-          old_pdf       = self.old_actor.pdf(states)
-          old_log_probs = old_pdf.log_prob(actions).sum(-1, keepdim=True)
-
-        pdf       = self.actor.pdf(states)
-        log_probs = pdf.log_prob(actions).sum(-1, keepdim=True)
-
-        ratio = (log_probs - old_log_probs).exp()
-
-        cpi_loss = ratio * advantages
-        clip_loss = ratio.clamp(0.8, 1.2) * advantages
-        actor_loss = -torch.min(cpi_loss, clip_loss).mean()
-
-        values = self.critic(states)
-        critic_loss = F.mse_loss(values, returns)
-        #critic_loss = 0.5 * (returns - values).pow(2).mean()
-
-        entropy_penalty = -self.entropy_coeff * pdf.entropy().mean()
-
-        self.actor_optim.zero_grad()
-        (actor_loss + entropy_penalty).backward()
-        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.grad_clip)
-        self.actor_optim.step()
-
-        self.critic_optim.zero_grad()
-        critic_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.grad_clip)
-        self.critic_optim.step()
-        """
-        obs_batch = states
-        action_batch = actions
-        advantage_batch = advantages
-        return_batch = returns
-        # TODO, move this outside loop?
-        with torch.no_grad():
-          obs_batch = self.actor.normalize_state(obs_batch, update=False)
-          old_pdf = self.old_actor.pdf(obs_batch)
-          old_log_probs = old_pdf.log_prob(action_batch).sum(-1, keepdim=True)
-
-        values = self.critic(obs_batch)
-        pdf = self.actor.pdf(obs_batch)
-        
-        log_probs = pdf.log_prob(action_batch).sum(-1, keepdim=True)
-        
-        ratio = (log_probs - old_log_probs).exp()
-
-        cpi_loss = ratio * advantage_batch
-        clip_loss = ratio.clamp(0.8, 1.2) * advantage_batch
-        actor_loss = -torch.min(cpi_loss, clip_loss).mean()
-
-        if not torch.isfinite(actor_loss) or actor_loss.item() > 100:
-          print("NON FINITE ACTR LOSS {}, old logs {}, logs {}, adv {}".format(actor_loss, old_log_probs, log_probs, advantage_batch))
-          print("ratio {}, cpi {}, clip {}".format(ratio, cpi_loss, clip_loss))
-          exit(1)
-
-        critic_loss = 0.5 * (return_batch - values).pow(2).mean()
-
-        entropy_penalty = -self.entropy_coeff * pdf.entropy().mean()
-
-        # TODO: add ability to optimize critic and actor seperately, with different learning rates
-
-        self.actor_optim.zero_grad()
-        (actor_loss + entropy_penalty).backward()
-
-        # Clip the gradient norm to prevent "unlucky" minibatches from 
-        # causing pathalogical updates
-        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.grad_clip)
-        self.actor_optim.step()
-
-        self.critic_optim.zero_grad()
-        critic_loss.backward()
-
-        # Clip the gradient norm to prevent "unlucky" minibatches from 
-        # causing pathalogical updates
-        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.grad_clip)
-        self.critic_optim.step()
+      return kl_divergence(pdf, old_pdf).mean().detach().numpy()
 
 
-        actor_norm = np.sqrt(np.mean(np.square(np.concatenate([p.grad.data.numpy().flatten() for p in self.actor.parameters() if p.grad is not None]))))
-        critic_norm = np.sqrt(np.mean(np.square(np.concatenate([p.grad.data.numpy().flatten() for p in self.critic.parameters() if p.grad is not None]))))
+    @torch.no_grad()
+    def sample(self, min_steps, max_traj_len, deterministic=False):
+        env = self.env_fn()
 
+        memory = Buffer(self.discount)
 
-        print("BATCH {} RATIO {} CLOSS {} ALOSS {} ENTROPY {}".format(i, ratio.mean(), critic_loss.mean(), actor_loss.mean(), pdf.entropy().mean()))
+        num_steps = 0
+        while num_steps < min_steps:
+            state = torch.Tensor(env.reset())
 
-        with torch.no_grad():
+            done = False
+            value = 0
+            traj_len = 0
 
-          a_loss += [actor_loss.item()]
-          c_loss += [critic_loss.item()]
-          ratios += [ratio.mean().numpy()]
-          ent    += [pdf.entropy().mean().numpy()]
-          adv    += [advantages.mean().numpy()]
-          a_p_n  += [actor_norm]
-          c_p_n  += [critic_norm]
+            while not done and traj_len < max_traj_len:
+                state = torch.Tensor(state)
+                norm_state = self.actor.normalize_state(state, update=False)
+                action = self.actor(norm_state, deterministic)
+                value = self.critic(norm_state)
+                next_state, reward, done, _ = env.step(action.numpy())
 
-      kl_div = kl_divergence(pdf, old_pdf).mean() 
-      kl     += [kl_div.detach().numpy()]
-      if kl_div > 0.1:
-        print("Max KL reached, aborting update")
-        break
+                reward = np.array([reward])
 
-    self.buffer.clear()
-    return timesteps, np.mean(kl), np.mean(a_loss), np.mean(c_loss), np.mean(ratios), np.mean(ent), np.mean(adv), np.mean(a_p_n), np.mean(c_p_n)
+                memory.push(state.numpy(), action.numpy(), reward, value.numpy())
 
-def eval_policy(policy, env, max_steps=400):
-  sum_reward = 0
-  for _ in range(10):
-    state = torch.Tensor(env.reset())
+                state = next_state
 
-    done = False
-    traj_len = 0
-    while not done and traj_len < max_steps:
-      action = policy(state, deterministic=True).numpy()
-      next_state, reward, done, _ = env.step(action)
-      state = torch.Tensor(next_state)
-      sum_reward += reward
-      traj_len += 1
-  return sum_reward / 10
+                traj_len += 1
+                num_steps += 1
+
+            value = self.critic(torch.Tensor(state))
+            memory.end_trajectory(terminal_value=(not done) * value.numpy())
+
+        return memory
+
+    def do_iteration(self, num_steps, max_traj_len, epochs, kl_thresh=0.02):
+      self.old_actor.load_state_dict(self.actor.state_dict())
+
+      memory = self.sample(num_steps, max_traj_len)
+      kls = []
+      for _ in range(epochs):
+        for batch in memory.sample():
+          states, actions, returns, advantages = batch
+          
+          kl = self.update_policy(states, actions, returns, advantages)
+          kls += [kl]
+          if kl > kl_thresh:
+              print("Max kl reached, stopping optimization early.")
+              break
+      return np.mean(kls), len(memory)
+
+def eval_policy(policy, env, update_normalizer, deterministic, min_timesteps=2000, max_traj_len=400, verbose=True):
+  with torch.no_grad():
+    steps = 0
+    ep_returns = []
+    while steps < min_timesteps: # Prenormalize
+      state = torch.Tensor(env.reset())
+      done = False
+      traj_len = 0
+      ep_return = 0
+
+      while not done and traj_len < max_traj_len:
+        state = policy.normalize_state(state, update=update_normalizer)
+        action = policy(state, deterministic=deterministic)
+        next_state, reward, done, _ = env.step(action.numpy())
+        state = torch.Tensor(next_state)
+        ep_return += reward
+        traj_len += 1
+        steps += 1
+        if verbose:
+          print("Evaluating {:5d}/{:5d}".format(steps, min_timesteps), end="\r")
+      ep_returns += [ep_return]
+
+  print()
+  return np.mean(ep_returns)
+  
 
 def run_experiment(args):
-  from policies import FF_Stochastic_Actor, FF_V
+    torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757
 
-  from rrl import env_factory, create_logger
+    from rrl import env_factory, create_logger
 
-  import locale, os
-  locale.setlocale(locale.LC_ALL, '')
+    # wrapper function for creating parallelized envs
+    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=False)
+    obs_dim = env_fn().observation_space.shape[0]
+    action_dim = env_fn().action_space.shape[0]
 
-  env_fn = env_factory(args.env_name)
-  
-  eval_env = env_fn()
+    # Set seeds
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
 
-  state_dim = env_fn().observation_space.shape[0]
-  action_dim = env_fn().action_space.shape[0]
+    policy = FF_Stochastic_Actor(obs_dim, action_dim, env_name=args.env_name, fixed_std=torch.ones(action_dim)*np.exp(-2))
+    critic = FF_V(obs_dim)
 
-  actor = FF_Stochastic_Actor(state_dim, action_dim, env_name=args.env_name)
-  critic = FF_V(state_dim)
+    env = env_fn()
+    eval_policy(policy, env, True, False, min_timesteps=args.prenormalize_steps, max_traj_len=args.traj_len)
 
-  algo = PPO(actor, critic, args, Buffer(discount=args.discount), env_fn)
+    policy.train(0)
+    critic.train(0)
 
-  steps = 0
-  while steps < args.prenormalize_steps: # Prenormalize
-    state = torch.Tensor(eval_env.reset())
-    done = False
-    traj_len = 0
-    while not done and traj_len < 400:
-      state = actor.normalize_state(state)
-      action = actor(state, deterministic=False).numpy()
-      next_state, reward, done, _ = eval_env.step(action)
-      state = torch.Tensor(next_state)
-      traj_len += 1
-      steps += 1
-    print("Prenormalizing {:5d}/{:5d}".format(steps, args.prenormalize_steps), end="\r")
-  print()
+    algo = PPO(policy, critic, env_fn)
 
-  # create a tensorboard logging object
-  logger = create_logger(args)
+    # create a tensorboard logging object
+    logger = create_logger(args)
 
-  if args.save_actor is None:
-    args.save_actor = os.path.join(logger.dir, 'actor.pt')
+    if args.save_actor is None:
+      args.save_actor = os.path.join(logger.dir, 'actor.pt')
 
+    print()
+    print("Proximal Policy Optimization:")
+    print("\tseed:               {}".format(args.seed))
+    print("\tenv:                {}".format(args.env_name))
+    print("\ttimesteps:          {}".format(args.timesteps))
+    print("\tprenormalize steps: {}".format(args.prenormalize_steps))
+    print("\traj_len:            {}".format(args.traj_len))
+    print("\tdiscount:           {}".format(args.discount))
+    print("\tactor_lr:           {}".format(args.a_lr))
+    print("\tcritic_lr:          {}".format(args.c_lr))
+    print("\tadam eps:           {}".format(args.eps))
+    print("\tentropy coeff:      {}".format(args.entropy_coeff))
+    print("\tgrad clip:          {}".format(args.grad_clip))
+    print("\tbatch size:         {}".format(args.batch_size))
+    print("\tepochs:             {}".format(args.epochs))
+    print()
 
-  i = 0
-  steps = 0
-  while steps < args.timesteps:
-    timesteps, kl, a_loss, c_loss, ratio, entropy, adv, a_norm, c_norm = algo.update_policy(args.epochs, args.batch_size)
-    steps += timesteps
-    with torch.no_grad():
-      iter_eval = eval_policy(actor, eval_env)
-    print("iter {:2d}) return {:5.1f} | critic {:9.5f} | actor {:9.5f} | entropy {:5.3f} | KL {:5.3f} | r {:5.4f} | {:n} of {:n}".format(i, iter_eval, c_loss, a_loss, entropy, kl, ratio, steps, int(args.timesteps)))
-    logger.add_scalar(args.env_name + '/ppo/iteration_return', iter_eval, i)
-    logger.add_scalar(args.env_name + '/ppo/timestep_return', iter_eval, steps)
-    logger.add_scalar(args.env_name + '/ppo/critic_loss', c_loss, i)
-    logger.add_scalar(args.env_name + '/ppo/actor_loss', a_loss, i)
-    logger.add_scalar(args.env_name + '/ppo/entropy', entropy, i)
-    logger.add_scalar(args.env_name + '/ppo/actor_param_norm', a_norm, i)
-    logger.add_scalar(args.env_name + '/ppo/critic_param_norm', c_norm, i)
-    logger.add_scalar(args.env_name + '/ppo/kl', kl, i)
+    itr = 0
+    timesteps = 0
+    best_reward = None
+    while timesteps < args.timesteps:
+      kl, steps = algo.do_iteration(args.num_steps, args.traj_len, args.epochs)
+      eval_reward = eval_policy(algo.actor, env, False, True, min_timesteps=args.traj_len*3, max_traj_len=args.traj_len)
 
-    i += 1
+      timesteps += steps
+      print("iter {:4d} | return: {:5.2f} | KL {:5.4f} | timesteps {:n}".format(itr, eval_reward, kl, timesteps))
 
-  exit(1)
+      if best_reward is None or eval_reward > best_reward:
+        torch.save(algo.actor, args.save_actor)
+        print("\t(best policy so far! saving to {})".format(args.save_actor))
 
-
+      logger.add_scalar(args.env_name + '/kl', kl, itr)
+      logger.add_scalar(args.env_name + '/return', eval_reward, itr)
+      itr += 1

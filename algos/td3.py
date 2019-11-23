@@ -169,9 +169,6 @@ def run_experiment(args):
   if args.save_actor is None:
     args.save_actor = os.path.join(logger.dir, 'actor.pt')
 
-  #if args.save_critic is None:
-  #  args.save_critic = os.path.join(logger.dir, 'critic.pt')
-
   # Keep track of some statistics for each episode
   training_start = time()
   episode_start = time()

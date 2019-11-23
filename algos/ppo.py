@@ -238,6 +238,8 @@ def run_experiment(args):
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757
 
     from rrl import env_factory, create_logger
+    import locale, os
+    locale.setlocale(locale.LC_ALL, '')
 
     # wrapper function for creating parallelized envs
     env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=False)
@@ -271,7 +273,7 @@ def run_experiment(args):
     print("\tenv:                {}".format(args.env_name))
     print("\ttimesteps:          {}".format(args.timesteps))
     print("\tprenormalize steps: {}".format(args.prenormalize_steps))
-    print("\traj_len:            {}".format(args.traj_len))
+    print("\ttraj_len:            {}".format(args.traj_len))
     print("\tdiscount:           {}".format(args.discount))
     print("\tactor_lr:           {}".format(args.a_lr))
     print("\tcritic_lr:          {}".format(args.c_lr))

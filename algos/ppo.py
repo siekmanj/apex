@@ -65,9 +65,7 @@ class Buffer:
     R = terminal_value.squeeze(0).copy() # Avoid copy?
     for reward in reversed(rewards):
         R = self.discount * R + reward
-        returns.insert(0, R) # TODO: self.returns.insert(self.path_idx, R) ? 
-                             # also technically O(k^2), may be worth just reversing list
-                             # BUG? This is adding copies of R by reference (?)
+        returns.insert(0, R)
 
     self.returns += returns
 
@@ -106,6 +104,56 @@ class Buffer:
         advantages = self.advantages[idxs]
 
         yield states, actions, returns, advantages
+
+@ray.remote
+class PPO_Worker:
+  def __init__(self, policy, critic, env_fn, gamma):
+    self.actor = deepcopy(policy)
+    self.critic = deepcopy(critic)
+    self.env = env_fn()
+    self.gamma = gamma
+    self.memory = Buffer(gamma)
+
+  def update_policy(self, new_actor_params, new_critic_params, input_norm=None):
+    for p, new_p in zip(self.actor.parameters(), new_actor_params):
+      p.data.copy_(new_p)
+
+    for p, new_p in zip(self.critic.parameters(), new_critic_params):
+      p.data.copy_(new_p)
+
+    if input_norm is not None:
+      self.actor.welford_state_mean, self.actor.welford_state_mean_diff, self.actor.welford_state_n = input_norm
+
+  def sample(self, max_traj_len, min_steps):
+    num_steps = 0
+    while num_steps < min_steps:
+      state = torch.Tensor(env.reset())
+
+      done = False
+      value = 0
+      traj_len = 0
+
+      while not done and traj_len < max_traj_len:
+          state = torch.Tensor(state)
+          norm_state = self.actor.normalize_state(state, update=False)
+          action = self.actor(norm_state, deterministic)
+          value = self.critic(norm_state)
+          next_state, reward, done, _ = env.step(action.numpy())
+
+          reward = np.array([reward])
+
+          self.memory.push(state.numpy(), action.numpy(), reward, value.numpy())
+
+          state = next_state
+
+          traj_len += 1
+          num_steps += 1
+
+      value = self.critic(torch.Tensor(state))
+      memory.end_trajectory(terminal_value=(not done) * value.numpy())
+
+    return memory
+
 
 class PPO:
     def __init__(self, actor, critic, env_fn, discount=0.99, entropy_coeff=0.0, a_lr=1e-4, c_lr=1e-4, eps=1e-5, grad_clip = 0.05):
@@ -157,6 +205,7 @@ class PPO:
       return kl_divergence(pdf, old_pdf).mean().detach().numpy()
 
 
+    """
     @torch.no_grad()
     def sample(self, min_steps, max_traj_len, deterministic=False):
         env = self.env_fn()
@@ -192,6 +241,7 @@ class PPO:
 
         return memory
 
+    """
     def do_iteration(self, num_steps, max_traj_len, epochs, kl_thresh=0.02):
       self.old_actor.load_state_dict(self.actor.state_dict())
 

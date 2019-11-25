@@ -290,21 +290,21 @@ if __name__ == "__main__":
     parser.add_argument("--env_name",               default='Cassie-v0',   type=str)
     parser.add_argument("--traj_len",       "-tl",  default=400,           type=int)      # max trajectory length for environment
     parser.add_argument("--prenormalize_steps",     default=10000,         type=int)      
-    parser.add_argument("--num_steps",              default=1000,          type=int)      
+    parser.add_argument("--num_steps",              default=5000,          type=int)      
 
     parser.add_argument('--discount',               default=0.99,          type=float)    # the discount factor
     parser.add_argument("--a_lr",           "-alr", default=1e-4,          type=float)    # adam learning rate for actor
-    parser.add_argument("--c_lr",           "-clr", default=5e-4,          type=float)    # adam learning rate for critic
+    parser.add_argument("--c_lr",           "-clr", default=1e-4,          type=float)    # adam learning rate for critic
     parser.add_argument("--eps",            "-ep",  default=1e-5,          type=float)    # adam eps
     parser.add_argument("--entropy_coeff",          default=0.0,           type=float)
     parser.add_argument("--grad_clip",              default=0.05,          type=float)
     parser.add_argument("--batch_size",             default=64,            type=int)      # batch size for policy update
-    parser.add_argument("--epochs",                 default=5,             type=int)      # number of updates per iter
+    parser.add_argument("--epochs",                 default=3,             type=int)      # number of updates per iter
 
     parser.add_argument("--save_actor",             default=None,          type=str)
     parser.add_argument("--save_critic",            default=None,          type=str)
     parser.add_argument("--logdir",                 default="./logs/ppo/", type=str)
-    parser.add_argument("--workers",                default=2,             type=int)
+    parser.add_argument("--workers",                default=4,             type=int)
     args = parser.parse_args()
 
     run_experiment(args)

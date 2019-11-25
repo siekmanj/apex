@@ -8,14 +8,12 @@ import torch.optim as optim
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 from torch.distributions import kl_divergence
 
-import time
+from time import time
 
 import numpy as np
 import os
 
 import ray
-
-PEDRO = False
 
 from policies.critic import Critic, FF_V
 from policies.actor import Actor, FF_Stochastic_Actor
@@ -62,7 +60,7 @@ class Buffer:
 
     returns = []
 
-    R = terminal_value.squeeze(0).copy() # Avoid copy?
+    R = terminal_value.squeeze(0).copy()
     for reward in reversed(rewards):
         R = self.discount * R + reward
         returns.insert(0, R)
@@ -71,8 +69,6 @@ class Buffer:
 
     self.ep_returns += [np.sum(rewards)]
     self.ep_lens    += [len(rewards)]
-
-    #self.path_idx = self.ptr
 
   def _finish_buffer(self):
     self.states  = torch.Tensor(self.states)
@@ -97,6 +93,14 @@ class Buffer:
       sampler = BatchSampler(random_indices, batch_size, drop_last=True)
 
       for i, idxs in enumerate(sampler):
+        #print(np.max(idxs))
+        #print(self.states.size())
+
+        #idxs = torch.LongTensor(idxs)
+        #print(self.returns)
+        #print(idxs.size())
+        #if True:
+        #  wtf = self.states[[0, 1]]
 
         states     = self.states[idxs]
         actions    = self.actions[idxs] 
@@ -112,7 +116,6 @@ class PPO_Worker:
     self.critic = deepcopy(critic)
     self.env = env_fn()
     self.gamma = gamma
-    self.memory = Buffer(gamma)
 
   def update_policy(self, new_actor_params, new_critic_params, input_norm=None):
     for p, new_p in zip(self.actor.parameters(), new_actor_params):
@@ -124,10 +127,12 @@ class PPO_Worker:
     if input_norm is not None:
       self.actor.welford_state_mean, self.actor.welford_state_mean_diff, self.actor.welford_state_n = input_norm
 
-  def sample(self, max_traj_len, min_steps):
+  def collect_experience(self, max_traj_len, min_steps):
+
     num_steps = 0
+    memory = Buffer(self.gamma)
     while num_steps < min_steps:
-      state = torch.Tensor(env.reset())
+      state = torch.Tensor(self.env.reset())
 
       done = False
       value = 0
@@ -136,13 +141,13 @@ class PPO_Worker:
       while not done and traj_len < max_traj_len:
           state = torch.Tensor(state)
           norm_state = self.actor.normalize_state(state, update=False)
-          action = self.actor(norm_state, deterministic)
+          action = self.actor(norm_state, False)
           value = self.critic(norm_state)
-          next_state, reward, done, _ = env.step(action.numpy())
+          next_state, reward, done, _ = self.env.step(action.numpy())
 
           reward = np.array([reward])
 
-          self.memory.push(state.numpy(), action.numpy(), reward, value.numpy())
+          memory.push(state.numpy(), action.numpy(), reward, value.numpy())
 
           state = next_state
 
@@ -154,9 +159,8 @@ class PPO_Worker:
 
     return memory
 
-
 class PPO:
-    def __init__(self, actor, critic, env_fn, discount=0.99, entropy_coeff=0.0, a_lr=1e-4, c_lr=1e-4, eps=1e-5, grad_clip = 0.05):
+    def __init__(self, actor, critic, env_fn, discount=0.99, entropy_coeff=0.0, a_lr=1e-4, c_lr=1e-4, eps=1e-5, grad_clip=0.05, workers=4):
 
       self.actor = actor
       self.old_actor = deepcopy(actor)
@@ -169,6 +173,14 @@ class PPO:
       self.discount = discount
       self.entropy_coeff = entropy_coeff
       self.grad_clip = grad_clip
+
+      if not ray.is_initialized():
+        if False: #redis_addr is not None:
+          ray.init(redis_address=redis_addr)
+        else:
+          ray.init()
+
+      self.workers = [PPO_Worker.remote(actor, critic, env_fn, discount) for _ in range(workers)]
 
     def update_policy(self, states, actions, returns, advantages):
       with torch.no_grad():
@@ -204,48 +216,53 @@ class PPO:
 
       return kl_divergence(pdf, old_pdf).mean().detach().numpy()
 
+    def merge_buffers(self, buffers):
+      memory = Buffer()
 
-    """
-    @torch.no_grad()
-    def sample(self, min_steps, max_traj_len, deterministic=False):
-        env = self.env_fn()
+      for b in buffers:
+        offset = len(memory)
 
-        memory = Buffer(self.discount)
+        memory.states  += b.states
+        memory.actions += b.actions
+        memory.rewards += b.rewards
+        memory.values  += b.values
+        memory.returns += b.returns
 
-        num_steps = 0
-        while num_steps < min_steps:
-            state = torch.Tensor(env.reset())
+        memory.ep_returns += b.ep_returns
+        memory.ep_lens    += b.ep_lens
 
-            done = False
-            value = 0
-            traj_len = 0
+        memory.traj_idx += [offset + i for i in b.traj_idx[1:]]
+        memory.size     += b.size
+      return memory
 
-            while not done and traj_len < max_traj_len:
-                state = torch.Tensor(state)
-                norm_state = self.actor.normalize_state(state, update=False)
-                action = self.actor(norm_state, deterministic)
-                value = self.critic(norm_state)
-                next_state, reward, done, _ = env.step(action.numpy())
-
-                reward = np.array([reward])
-
-                memory.push(state.numpy(), action.numpy(), reward, value.numpy())
-
-                state = next_state
-
-                traj_len += 1
-                num_steps += 1
-
-            value = self.critic(torch.Tensor(state))
-            memory.end_trajectory(terminal_value=(not done) * value.numpy())
-
-        return memory
-
-    """
-    def do_iteration(self, num_steps, max_traj_len, epochs, kl_thresh=0.02):
+    def do_iteration(self, num_steps, max_traj_len, epochs, kl_thresh=0.02, verbose=True):
       self.old_actor.load_state_dict(self.actor.state_dict())
 
-      memory = self.sample(num_steps, max_traj_len)
+      start = time()
+      actor_param_id  = ray.put(list(self.actor.parameters()))
+      critic_param_id = ray.put(list(self.critic.parameters()))
+      norm_id = ray.put([self.actor.welford_state_mean, self.actor.welford_state_mean_diff, self.actor.welford_state_n])
+      if verbose:
+        print("\tDEBUG: {:5.4f}s to place policy params in shared memory.".format(time() - start))
+
+      steps = num_steps // len(self.workers)
+
+      start = time()
+      for w in self.workers:
+        w.update_policy.remote(actor_param_id, critic_param_id, input_norm=norm_id)
+      if verbose:
+        print("\tDEBUG: {:5.4f}s to copy policy params to workers.".format(time() - start))
+
+      start = time()
+      buffers = ray.get([w.collect_experience.remote(max_traj_len, steps) for w in self.workers])
+      memory = self.merge_buffers(buffers)
+
+      total_steps = len(memory)
+      elapsed = time() - start
+      if verbose:
+        print("\tDEBUG: {:3.2f}s to collect {:6n} timesteps | {:3.2}k/s.".format(elapsed, total_steps, (total_steps/1000)/elapsed))
+
+      start = time()
       kls = []
       for _ in range(epochs):
         for batch in memory.sample():
@@ -256,6 +273,8 @@ class PPO:
           if kl > kl_thresh:
               print("Max kl reached, stopping optimization early.")
               break
+      if verbose:
+        print("\tDEBUG: {:3.2f}s to update policy.".format(time() - start))
       return np.mean(kls), len(memory)
 
 def eval_policy(policy, env, update_normalizer, deterministic, min_timesteps=2000, max_traj_len=400, verbose=True):
@@ -309,7 +328,7 @@ def run_experiment(args):
     policy.train(0)
     critic.train(0)
 
-    algo = PPO(policy, critic, env_fn)
+    algo = PPO(policy, critic, env_fn, workers=args.workers)
 
     # create a tensorboard logging object
     logger = create_logger(args)
@@ -323,7 +342,7 @@ def run_experiment(args):
     print("\tenv:                {}".format(args.env_name))
     print("\ttimesteps:          {}".format(args.timesteps))
     print("\tprenormalize steps: {}".format(args.prenormalize_steps))
-    print("\ttraj_len:            {}".format(args.traj_len))
+    print("\ttraj_len:           {}".format(args.traj_len))
     print("\tdiscount:           {}".format(args.discount))
     print("\tactor_lr:           {}".format(args.a_lr))
     print("\tcritic_lr:          {}".format(args.c_lr))
@@ -332,6 +351,7 @@ def run_experiment(args):
     print("\tgrad clip:          {}".format(args.grad_clip))
     print("\tbatch size:         {}".format(args.batch_size))
     print("\tepochs:             {}".format(args.epochs))
+    print("\tworkers:            {}".format(args.workers))
     print()
 
     itr = 0
@@ -339,7 +359,7 @@ def run_experiment(args):
     best_reward = None
     while timesteps < args.timesteps:
       kl, steps = algo.do_iteration(args.num_steps, args.traj_len, args.epochs)
-      eval_reward = eval_policy(algo.actor, env, False, True, min_timesteps=args.traj_len*3, max_traj_len=args.traj_len)
+      eval_reward = eval_policy(algo.actor, env, False, True, min_timesteps=args.traj_len*3, max_traj_len=args.traj_len, verbose=False)
 
       timesteps += steps
       print("iter {:4d} | return: {:5.2f} | KL {:5.4f} | timesteps {:n}".format(itr, eval_reward, kl, timesteps))

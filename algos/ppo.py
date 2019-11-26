@@ -163,7 +163,6 @@ class PPO_Worker:
       value = critic(torch.Tensor(state))
       memory.end_trajectory(terminal_value=(not done) * value.numpy())
 
-    print("SAMPLED {} STEPS IN {}".format(len(memory), time() - start))
     return memory
 
 class PPO:

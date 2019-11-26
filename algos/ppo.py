@@ -209,7 +209,8 @@ class PPO:
       self.actor_optim.step()
       self.critic_optim.step()
 
-      return kl_divergence(pdf, old_pdf).mean().detach().numpy()
+      with torch.no_grad():
+        return kl_divergence(pdf, old_pdf).mean().numpy(), ((actor_loss + entropy_penalty).item(), critic_loss.item())
 
     def merge_buffers(self, buffers):
       memory = Buffer()
@@ -255,22 +256,30 @@ class PPO:
       total_steps = len(memory)
       elapsed = time() - start
       if verbose:
-        print("\tDEBUG: {:3.2f}s to collect {:6n} timesteps | {:3.2}k/s.".format(elapsed, total_steps, (total_steps/1000)/elapsed))
+        print("\t{:3.2f}s to collect {:6n} timesteps | {:3.2}k/s.".format(elapsed, total_steps, (total_steps/1000)/elapsed))
 
-      start = time()
-      kls = []
-      for _ in range(epochs):
+      start  = time()
+      kls    = []
+      a_loss = []
+      c_loss = []
+      for epoch in range(epochs):
         for batch in memory.sample():
           states, actions, returns, advantages = batch
           
-          kl = self.update_policy(states, actions, returns, advantages)
+          kl, losses = self.update_policy(states, actions, returns, advantages)
           kls += [kl]
+          a_loss += [losses[0]]
+          c_loss += [losses[1]]
+
           if kl > kl_thresh:
-              print("Max kl reached, stopping optimization early.")
+              print("\t\tMax kl reached, stopping optimization early.")
               break
+        if verbose:
+          print("\t\tepoch {:2d} kl {:4.3f}, actor loss {:6.3f}, critic loss {:6.3f}".format(epoch, np.mean(kls), np.mean(a_loss), np.mean(c_loss)))
+
       if verbose:
-        print("\tDEBUG: {:3.2f}s to update policy.".format(time() - start))
-      return np.mean(kls), len(memory)
+        print("\t{:3.2f}s to update policy.".format(time() - start))
+      return np.mean(kls), np.mean(a_loss), np.mean(c_loss), len(memory)
 
 def eval_policy(policy, env, update_normalizer, deterministic, min_timesteps=2000, max_traj_len=400, verbose=True):
   with torch.no_grad():
@@ -299,7 +308,7 @@ def eval_policy(policy, env, update_normalizer, deterministic, min_timesteps=200
   
 
 def run_experiment(args):
-    torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757
+    torch.set_num_threads(1)
 
     from rrl import env_factory, create_logger
     import locale, os
@@ -353,7 +362,7 @@ def run_experiment(args):
     timesteps = 0
     best_reward = None
     while timesteps < args.timesteps:
-      kl, steps = algo.do_iteration(args.num_steps, args.traj_len, args.epochs)
+      kl, a_loss, c_loss, steps = algo.do_iteration(args.num_steps, args.traj_len, args.epochs)
       eval_reward = eval_policy(algo.actor, env, False, True, min_timesteps=args.traj_len*3, max_traj_len=args.traj_len, verbose=False)
 
       timesteps += steps
@@ -366,4 +375,6 @@ def run_experiment(args):
 
       logger.add_scalar(args.env_name + '/kl', kl, itr)
       logger.add_scalar(args.env_name + '/return', eval_reward, itr)
+      logger.add_scalar(args.env_name + '/actor_loss', a_loss, itr)
+      logger.add_scalar(args.env_name + '/critic_loss', c_loss, itr)
       itr += 1

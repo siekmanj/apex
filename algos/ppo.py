@@ -93,15 +93,6 @@ class Buffer:
       sampler = BatchSampler(random_indices, batch_size, drop_last=True)
 
       for i, idxs in enumerate(sampler):
-        #print(np.max(idxs))
-        #print(self.states.size())
-
-        #idxs = torch.LongTensor(idxs)
-        #print(self.returns)
-        #print(idxs.size())
-        #if True:
-        #  wtf = self.states[[0, 1]]
-
         states     = self.states[idxs]
         actions    = self.actions[idxs] 
         returns    = self.returns[idxs]
@@ -111,11 +102,8 @@ class Buffer:
 
 @ray.remote
 class PPO_Worker:
-  #def __init__(self, policy, critic, env_fn, gamma):
   def __init__(self, env_fn, gamma):
     torch.set_num_threads(1)
-    #self.actor = deepcopy(policy)
-    #self.critic = deepcopy(critic)
     self.env = env_fn()
     self.gamma = gamma
 
@@ -186,6 +174,7 @@ class PPO:
         else:
           ray.init(num_cpus=workers)
 
+      #self.workers = [PPO_Worker.remote(env_fn, discount) for _ in range(workers)]
       self.workers = [PPO_Worker.remote(env_fn, discount) for _ in range(workers)]
 
     def update_policy(self, states, actions, returns, advantages):
@@ -373,6 +362,7 @@ def run_experiment(args):
       if best_reward is None or eval_reward > best_reward:
         torch.save(algo.actor, args.save_actor)
         print("\t(best policy so far! saving to {})".format(args.save_actor))
+        best_reward = eval_reward
 
       logger.add_scalar(args.env_name + '/kl', kl, itr)
       logger.add_scalar(args.env_name + '/return', eval_reward, itr)

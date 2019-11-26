@@ -166,7 +166,7 @@ class PPO_Worker:
     return memory
 
 class PPO:
-    def __init__(self, actor, critic, env_fn, discount=0.99, entropy_coeff=0.0, a_lr=1e-4, c_lr=1e-4, eps=1e-5, grad_clip=0.05, workers=4):
+    def __init__(self, actor, critic, env_fn, discount=0.99, entropy_coeff=0.0, a_lr=1e-4, c_lr=1e-4, eps=1e-5, grad_clip=0.05, workers=4, redis=None):
 
       self.actor = actor
       self.old_actor = deepcopy(actor)
@@ -181,10 +181,10 @@ class PPO:
       self.grad_clip = grad_clip
 
       if not ray.is_initialized():
-        if False: #redis_addr is not None:
-          ray.init(redis_address=redis_addr)
+        if redis is not None:
+          ray.init(redis_address=redis)
         else:
-          ray.init()
+          ray.init(num_cpus=workers)
 
       self.workers = [PPO_Worker.remote(env_fn, discount) for _ in range(workers)]
 

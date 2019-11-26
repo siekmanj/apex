@@ -262,6 +262,7 @@ class PPO:
       kls    = []
       a_loss = []
       c_loss = []
+      done = False
       for epoch in range(epochs):
         for batch in memory.sample():
           states, actions, returns, advantages = batch
@@ -271,11 +272,14 @@ class PPO:
           a_loss += [losses[0]]
           c_loss += [losses[1]]
 
-          if kl > kl_thresh:
+          if max(kls) > kl_thresh:
+              done = True
               print("\t\tMax kl reached, stopping optimization early.")
               break
         if verbose:
           print("\t\tepoch {:2d} kl {:4.3f}, actor loss {:6.3f}, critic loss {:6.3f}".format(epoch, np.mean(kls), np.mean(a_loss), np.mean(c_loss)))
+        if done:
+          break
 
       if verbose:
         print("\t{:3.2f}s to update policy.".format(time() - start))

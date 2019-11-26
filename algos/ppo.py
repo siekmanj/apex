@@ -111,12 +111,14 @@ class Buffer:
 
 @ray.remote
 class PPO_Worker:
-  def __init__(self, policy, critic, env_fn, gamma):
-    self.actor = deepcopy(policy)
-    self.critic = deepcopy(critic)
+  #def __init__(self, policy, critic, env_fn, gamma):
+  def __init__(self, env_fn, gamma):
+    #self.actor = deepcopy(policy)
+    #self.critic = deepcopy(critic)
     self.env = env_fn()
     self.gamma = gamma
 
+  """
   def update_policy(self, new_actor_params, new_critic_params, input_norm=None):
     for p, new_p in zip(self.actor.parameters(), new_actor_params):
       p.data.copy_(new_p)
@@ -127,7 +129,10 @@ class PPO_Worker:
     if input_norm is not None:
       self.actor.welford_state_mean, self.actor.welford_state_mean_diff, self.actor.welford_state_n = input_norm
 
-  def collect_experience(self, max_traj_len, min_steps):
+  """
+
+  def collect_experience(self, actor, critic, max_traj_len, min_steps):
+    start = time()
 
     num_steps = 0
     memory = Buffer(self.gamma)
@@ -140,9 +145,9 @@ class PPO_Worker:
 
       while not done and traj_len < max_traj_len:
           state = torch.Tensor(state)
-          norm_state = self.actor.normalize_state(state, update=False)
-          action = self.actor(norm_state, False)
-          value = self.critic(norm_state)
+          norm_state = actor.normalize_state(state, update=False)
+          action = actor(norm_state, False)
+          value = critic(norm_state)
           next_state, reward, done, _ = self.env.step(action.numpy())
 
           reward = np.array([reward])
@@ -154,9 +159,10 @@ class PPO_Worker:
           traj_len += 1
           num_steps += 1
 
-      value = self.critic(torch.Tensor(state))
+      value = critic(torch.Tensor(state))
       memory.end_trajectory(terminal_value=(not done) * value.numpy())
 
+    print("SAMPLED {} STEPS IN {}".format(len(memory), time() - start))
     return memory
 
 class PPO:
@@ -180,7 +186,7 @@ class PPO:
         else:
           ray.init()
 
-      self.workers = [PPO_Worker.remote(actor, critic, env_fn, discount) for _ in range(workers)]
+      self.workers = [PPO_Worker.remote(env_fn, discount) for _ in range(workers)]
 
     def update_policy(self, states, actions, returns, advantages):
       with torch.no_grad():
@@ -239,22 +245,22 @@ class PPO:
       self.old_actor.load_state_dict(self.actor.state_dict())
 
       start = time()
-      actor_param_id  = ray.put(list(self.actor.parameters()))
-      critic_param_id = ray.put(list(self.critic.parameters()))
-      norm_id = ray.put([self.actor.welford_state_mean, self.actor.welford_state_mean_diff, self.actor.welford_state_n])
-      if verbose:
-        print("\tDEBUG: {:5.4f}s to place policy params in shared memory.".format(time() - start))
+      #actor_param_id  = ray.put(list(self.actor.parameters()))
+      #critic_param_id = ray.put(list(self.critic.parameters()))
+      #norm_id = ray.put([self.actor.welford_state_mean, self.actor.welford_state_mean_diff, self.actor.welford_state_n])
+      #if verbose:
+      #  print("\tDEBUG: {:5.4f}s to place policy params in shared memory.".format(time() - start))
 
       steps = num_steps // len(self.workers)
 
-      start = time()
-      for w in self.workers:
-        w.update_policy.remote(actor_param_id, critic_param_id, input_norm=norm_id)
-      if verbose:
-        print("\tDEBUG: {:5.4f}s to copy policy params to workers.".format(time() - start))
+      #start = time()
+      #for w in self.workers:
+      #  w.update_policy.remote(actor_param_id, critic_param_id, input_norm=norm_id)
+      #if verbose:
+      #  print("\tDEBUG: {:5.4f}s to copy policy params to workers.".format(time() - start))
 
       start = time()
-      buffers = ray.get([w.collect_experience.remote(max_traj_len, steps) for w in self.workers])
+      buffers = ray.get([w.collect_experience.remote(self.actor, self.critic, max_traj_len, steps) for w in self.workers])
       memory = self.merge_buffers(buffers)
 
       total_steps = len(memory)

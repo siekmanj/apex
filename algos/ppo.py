@@ -113,6 +113,7 @@ class Buffer:
 class PPO_Worker:
   #def __init__(self, policy, critic, env_fn, gamma):
   def __init__(self, env_fn, gamma):
+    torch.set_num_threads(1)
     #self.actor = deepcopy(policy)
     #self.critic = deepcopy(critic)
     self.env = env_fn()

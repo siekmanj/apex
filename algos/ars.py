@@ -173,7 +173,7 @@ def run_experiment(args):
       if not args.recurrent:
         policy = Linear_Actor(obs_space, act_space, hidden_size=args.hidden_size).float()
       else:
-        policy = LSTM_Actor(obs_space, act_space).float()
+        policy = LSTM_Actor(obs_space, act_space, layers=(hidden_size)).float()
 
       # policy parameters should be zero initialized according to ARS paper
       for p in policy.parameters():

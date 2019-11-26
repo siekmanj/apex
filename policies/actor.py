@@ -135,7 +135,7 @@ class LSTM_Actor(Actor):
 
     self.actor_layers = nn.ModuleList()
     self.actor_layers += [nn.LSTMCell(input_dim, layers[0])]
-    for i in range(hidden_layers-1):
+    for i in range(len(layers)-1):
         self.actor_layers += [nn.LSTMCell(layers[i], layers[i+1])]
     self.network_out = nn.Linear(layers[i-1], action_dim)
 

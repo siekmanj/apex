@@ -50,6 +50,7 @@ class SharedNoiseTable(object):
 @ray.remote
 class ARS_process(object):
   def __init__(self, policy_thunk, env_thunk, deltas, std, process_seed):
+    torch.set_num_threads(1)
     self.policy = policy_thunk()
     self.env    = env_thunk()
     self.param_shape = [x.shape for x in self.policy.parameters()]
@@ -77,8 +78,8 @@ class ARS_process(object):
         p.data -= 2*torch.from_numpy(dp);
       r_neg = black_box(self.policy, self.env)
 
-      #for p, dp in zip(self.policy.parameters(), delta):
-      #  p.data += torch.from_numpy(dp);
+      for p, dp in zip(self.policy.parameters(), delta):
+        p.data += torch.from_numpy(dp);
 
       if isinstance(r_pos, tuple):
         timesteps += r_pos[1]
@@ -264,6 +265,6 @@ def run_experiment(args):
             end="\r")
     i += 1
 
-    logger.add_scalar(args.env_name + ' eval timestep', iter_reward, timesteps)
-    logger.add_scalar(args.env_name + ' eval episode', iter_reward, i)
+    #logger.add_scalar(args.env_name + '/return', iter_reward, timesteps)
+    logger.add_scalar(args.env_name + '/return', iter_reward, i)
     torch.save(algo.policy, args.save_model)

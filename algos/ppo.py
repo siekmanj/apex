@@ -281,7 +281,7 @@ class PPO:
         print("\t{:3.2f}s to update policy.".format(time() - start))
       return np.mean(kls), np.mean(a_loss), np.mean(c_loss), len(memory)
 
-def eval_policy(policy, env, update_normalizer, deterministic, min_timesteps=2000, max_traj_len=400, verbose=True):
+def eval_policy(policy, env, update_normalizer, min_timesteps=2000, max_traj_len=400, verbose=True, noise=None):
   with torch.no_grad():
     steps = 0
     ep_returns = []
@@ -293,7 +293,9 @@ def eval_policy(policy, env, update_normalizer, deterministic, min_timesteps=200
 
       while not done and traj_len < max_traj_len:
         state = policy.normalize_state(state, update=update_normalizer)
-        action = policy(state, deterministic=deterministic)
+        action = policy(state, deterministic=True)
+        if noise is not None:
+          action = action + torch.randn(action.size()) * noise
         next_state, reward, done, _ = env.step(action.numpy())
         state = torch.Tensor(next_state)
         ep_return += reward
@@ -315,7 +317,7 @@ def run_experiment(args):
     locale.setlocale(locale.LC_ALL, '')
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=False)
+    env_fn = env_factory(args.env_name, state_est=args.state_est, clock_based=args.clock_based, mirror=False)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
 
@@ -327,7 +329,7 @@ def run_experiment(args):
     critic = FF_V(obs_dim)
 
     env = env_fn()
-    eval_policy(policy, env, True, False, min_timesteps=args.prenormalize_steps, max_traj_len=args.traj_len)
+    eval_policy(policy, env, True, min_timesteps=args.prenormalize_steps, max_traj_len=args.traj_len, noise=1)
 
     policy.train(0)
     critic.train(0)
@@ -335,9 +337,12 @@ def run_experiment(args):
     algo = PPO(policy, critic, env_fn, workers=args.workers)
 
     # create a tensorboard logging object
-    logger = create_logger(args)
+    if not args.nolog:
+      logger = create_logger(args)
+    else:
+      logger = None
 
-    if args.save_actor is None:
+    if args.save_actor is None and logger is not None:
       args.save_actor = os.path.join(logger.dir, 'actor.pt')
 
     print()
@@ -363,18 +368,20 @@ def run_experiment(args):
     best_reward = None
     while timesteps < args.timesteps:
       kl, a_loss, c_loss, steps = algo.do_iteration(args.num_steps, args.traj_len, args.epochs)
-      eval_reward = eval_policy(algo.actor, env, False, True, min_timesteps=args.traj_len*3, max_traj_len=args.traj_len, verbose=False)
+      eval_reward = eval_policy(algo.actor, env, False, min_timesteps=args.traj_len*3, max_traj_len=args.traj_len, verbose=False)
 
       timesteps += steps
       print("iter {:4d} | return: {:5.2f} | KL {:5.4f} | timesteps {:n}".format(itr, eval_reward, kl, timesteps))
 
       if best_reward is None or eval_reward > best_reward:
-        torch.save(algo.actor, args.save_actor)
         print("\t(best policy so far! saving to {})".format(args.save_actor))
         best_reward = eval_reward
+        if args.save_actor is not None:
+          torch.save(algo.actor, args.save_actor)
 
-      logger.add_scalar(args.env_name + '/kl', kl, itr)
-      logger.add_scalar(args.env_name + '/return', eval_reward, itr)
-      logger.add_scalar(args.env_name + '/actor_loss', a_loss, itr)
-      logger.add_scalar(args.env_name + '/critic_loss', c_loss, itr)
+      if logger is not None:
+        logger.add_scalar(args.env_name + '/kl', kl, itr)
+        logger.add_scalar(args.env_name + '/return', eval_reward, itr)
+        logger.add_scalar(args.env_name + '/actor_loss', a_loss, itr)
+        logger.add_scalar(args.env_name + '/critic_loss', c_loss, itr)
       itr += 1

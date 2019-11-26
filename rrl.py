@@ -150,6 +150,7 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument("--state_est", default=False, type=bool)
   parser.add_argument("--clock_based", default=False, type=bool)
+  parser.add_argument("--nolog",      action='store_true')
 
   print_logo(subtitle="Maintained by Oregon State University's Dynamic Robotics Lab")
 

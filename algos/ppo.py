@@ -279,7 +279,8 @@ class PPO:
         if verbose:
           print("\t\tepoch {:2d} kl {:4.3f}, actor loss {:6.3f}, critic loss {:6.3f}".format(epoch, np.mean(kls), np.mean(a_loss), np.mean(c_loss)))
         if done:
-          break
+          B
+        etxtbreak
 
       if verbose:
         print("\t{:3.2f}s to update policy.".format(time() - start))
@@ -372,7 +373,7 @@ def run_experiment(args):
     best_reward = None
     while timesteps < args.timesteps:
       kl, a_loss, c_loss, steps = algo.do_iteration(args.num_steps, args.traj_len, args.epochs)
-      eval_reward = eval_policy(algo.actor, env, False, min_timesteps=args.traj_len*3, max_traj_len=args.traj_len, verbose=False)
+      eval_reward = eval_policy(algo.actor, env, False, min_timesteps=args.traj_len*5, max_traj_len=args.traj_len, verbose=False)
 
       timesteps += steps
       print("iter {:4d} | return: {:5.2f} | KL {:5.4f} | timesteps {:n}".format(itr, eval_reward, kl, timesteps))

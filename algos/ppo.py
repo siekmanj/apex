@@ -52,19 +52,23 @@ class Buffer:
     self.size += 1
 
   def end_trajectory(self, terminal_value=0):
-    if terminal_value is None:
-        terminal_value = np.zeros(shape=(1,))
+    #print("ENDING TRAJECTORY, GOT VAL {}".format(terminal_value))
+    #if terminal_value is None:
+    #    terminal_value = np.zeros(shape=(1,))
 
     self.traj_idx += [self.size]
     rewards = self.rewards[self.traj_idx[-2]:self.traj_idx[-1]]
 
     returns = []
 
-    R = terminal_value.squeeze(0).copy()
+    #R = terminal_value.squeeze(0).copy()
+    R = terminal_value
     for reward in reversed(rewards):
+        #print("DISCOUNTED R: {} * {} + {}".format(self.discount, R, reward))
         R = self.discount * R + reward
         returns.insert(0, R)
 
+    #input()
     self.returns += returns
 
     self.ep_returns += [np.sum(rewards)]
@@ -148,8 +152,11 @@ class PPO_Worker:
           traj_len += 1
           num_steps += 1
 
-      value = critic(torch.Tensor(state))
-      memory.end_trajectory(terminal_value=(not done) * value.numpy())
+      #print("END STATE: done {}, traj {} of {}".format(done, traj_len, max_traj_len))
+      value = (not done) * critic(torch.Tensor(state)).numpy()
+
+      #print("TRAJECTORY OVER, PASSING IN VALUE {}".format(value))
+      memory.end_trajectory(terminal_value=value)
 
     return memory
 
@@ -279,8 +286,7 @@ class PPO:
         if verbose:
           print("\t\tepoch {:2d} kl {:4.3f}, actor loss {:6.3f}, critic loss {:6.3f}".format(epoch, np.mean(kls), np.mean(a_loss), np.mean(c_loss)))
         if done:
-          B
-        etxtbreak
+          break
 
       if verbose:
         print("\t{:3.2f}s to update policy.".format(time() - start))

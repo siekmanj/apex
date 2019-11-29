@@ -280,6 +280,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_steps",              default=5000,          type=int)      
 
     parser.add_argument('--discount',               default=0.99,          type=float)    # the discount factor
+    parser.add_argument('--std',                    default=0.13,          type=float)    # the fixed exploration std
     parser.add_argument("--a_lr",           "-alr", default=1e-4,          type=float)    # adam learning rate for actor
     parser.add_argument("--c_lr",           "-clr", default=1e-4,          type=float)    # adam learning rate for critic
     parser.add_argument("--eps",            "-ep",  default=1e-5,          type=float)    # adam eps

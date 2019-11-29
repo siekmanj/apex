@@ -336,7 +336,7 @@ def run_experiment(args):
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    policy = FF_Stochastic_Actor(obs_dim, action_dim, env_name=args.env_name, fixed_std=torch.ones(action_dim)*np.exp(-2))
+    policy = FF_Stochastic_Actor(obs_dim, action_dim, env_name=args.env_name, fixed_std=torch.ones(action_dim)*args.std)
     critic = FF_V(obs_dim)
 
     env = env_fn()

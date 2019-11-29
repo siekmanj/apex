@@ -8,25 +8,23 @@ import numpy as np
 import os
 import random
 
-import pickle
+#import pickle
 
-class CassieEnv_v1:
-    def __init__(self, traj, simrate=60, clock_based=False, state_est=False):
+class CassieEnv_v0:
+    def __init__(self, traj, simrate=60, clock_based=False):
         self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
 
         self.clock_based = clock_based
-        self.state_est = state_est
 
         if clock_based:
             self.observation_space = np.zeros(42)
-            if self.state_est:
-                self.observation_space = np.zeros(48)       # Size for use with state est
+            # self.observation_space = np.zeros(48)       # Size for use with state est
+            self.action_space      = np.zeros(10)
         else:
             self.observation_space = np.zeros(80)
-            if self.state_est:
-                self.observation_space = np.zeros(86)       # Size for use with state est
-        self.action_space      = np.zeros(10)
+            # self.observation_space = np.zeros(86)       # Size for use with state est
+            self.action_space      = np.zeros(10)
 
         dirname = os.path.dirname(__file__)
         if traj == "walking":
@@ -62,19 +60,16 @@ class CassieEnv_v1:
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
         self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
-
-        self.speed = 0
-        # maybe make ref traj only send relevant idxs?
-        ref_pos, ref_vel = self.get_ref_state(self.phase)
-        self.phase_add = 1
+    
+        #self.name = 
 
     def step_simulation(self, action):
 
         # maybe make ref traj only send relevant idxs?
-        ref_pos, ref_vel = self.get_ref_state(self.phase + self.phase_add)
-        
+        ref_pos, ref_vel = self.get_ref_state(self.phase + 1)
+
         target = action + ref_pos[self.pos_idx]
-        
+
         self.u = pd_in_t()
         for i in range(5):
             # TODO: move setting gains out of the loop?
@@ -103,7 +98,7 @@ class CassieEnv_v1:
         height = self.sim.qpos()[2]
 
         self.time  += 1
-        self.phase += self.phase_add
+        self.phase += 1
 
         if self.phase > self.phaselen:
             self.phase = 0
@@ -134,10 +129,6 @@ class CassieEnv_v1:
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
 
-        self.speed = (random.randint(0, 10)) / 10
-        # maybe make ref traj only send relevant idxs?
-        ref_pos, ref_vel = self.get_ref_state(self.phase)
-
         return self.get_full_state()
 
     # used for plotting against the reference trajectory
@@ -150,9 +141,6 @@ class CassieEnv_v1:
 
         self.sim.set_qpos(qpos)
         self.sim.set_qvel(qvel)
-
-        # maybe make ref traj only send relevant idxs?
-        ref_pos, ref_vel = self.get_ref_state(self.phase)
 
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
@@ -195,7 +183,6 @@ class CassieEnv_v1:
     # see notes for details
     def compute_reward(self):
         qpos = np.copy(self.sim.qpos())
-        qvel = np.copy(self.sim.qvel())
 
         ref_pos, ref_vel = self.get_ref_state(self.phase)
 
@@ -243,6 +230,17 @@ class CassieEnv_v1:
                  0.1 * np.exp(-orientation_error) + \
                  0.1 * np.exp(-spring_error)
 
+        # orientation error does not look informative
+        # maybe because it's comparing euclidean distance on quaternions
+        # print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\ncom:\t{2:.2f}, % = {3:.2f}\norient:\t{4:.2f}, % = {5:.2f}\nspring:\t{6:.2f}, % = {7:.2f}\n\n".format(
+        #             0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
+        #             0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
+        #             0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
+        #             0.1 * np.exp(-spring_error),      0.1 * np.exp(-spring_error) / reward * 100,
+        #             reward
+        #         )
+        #     )  
+
         return reward
 
     # get the corresponding state from the reference trajectory for the current phase
@@ -257,22 +255,16 @@ class CassieEnv_v1:
 
         # this is just setting the x to where it "should" be given the number
         # of cycles
-        # pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter
+        pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter
         
         # ^ should only matter for COM error calculation,
         # gets dropped out of state variable for input reasons
-
-        ###### Setting variable speed  #########
-        pos[0] *= self.speed
-        pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter * self.speed
-        ######                          ########
 
         # setting lateral distance target to 0?
         # regardless of reference trajectory?
         pos[1] = 0
 
         vel = np.copy(self.trajectory.qvel[phase * self.simrate])
-        vel[0] *= self.speed
 
         return pos, vel
 
@@ -280,7 +272,7 @@ class CassieEnv_v1:
         qpos = np.copy(self.sim.qpos())
         qvel = np.copy(self.sim.qvel()) 
 
-        ref_pos, ref_vel = self.get_ref_state(self.phase + self.phase_add)
+        ref_pos, ref_vel = self.get_ref_state(self.phase + 1)
 
         # TODO: maybe convert to set subtraction for clarity
         # {i for i in range(35)} - 
@@ -366,12 +358,11 @@ class CassieEnv_v1:
             self.cassie_state.joint.position[:],                                     # unactuated joint positions
             self.cassie_state.joint.velocity[:]                                      # unactuated joint velocities
         ])
+				#STATE ESTIMATION:
+        # return np.concatenate([robot_state,  
+        #                        ext_state])
 
-        if self.state_est:
-            return np.concatenate([robot_state,  
-                               ext_state])
-        else:
-            return np.concatenate([qpos[pos_index], 
+        return np.concatenate([qpos[pos_index], 
                                qvel[vel_index], 
                                ext_state])
 

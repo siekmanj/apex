@@ -26,30 +26,16 @@ def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=Fal
 
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
-    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0']:
-      from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
+    if path in ['Cassie-v0', 'Cassie-v1', 'CassieRandomDynamics-v0']:
+      from cassie import CassieEnv_v0, CassieEnv_v1, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
 
       if path == 'Cassie-v0':
-        env_fn = partial(CassieEnv, "walking", clock_based=clock_based, state_est=state_est)
-      elif path == 'CassieRandomDynamics-v0':
-        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=clock_based, state_est=state_est)
+        env_fn = partial(CassieEnv_v0, "walking", clock_based=clock_based)
+      if path == 'Cassie-v1':
+        env_fn = partial(CassieEnv_v1, "walking", clock_based=clock_based, state_est=state_est)
       elif path == 'CassieRandomDynamics-v0':
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=clock_based, state_est=state_est)
 
-      """
-      if mirror:
-          from rl.envs.wrappers import SymmetricEnv
-          if state_est:
-              # with state estimator
-              env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
-          else:
-              # without state estimator
-              env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
-                                              18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
-                                              -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
-                                              mirrored_act = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
-
-      """
       return env_fn
 
     spec = gym.envs.registry.spec(path)
@@ -358,6 +344,31 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
+    run_experiment(args)
+
+  elif sys.argv[1] == 'og_ppo':
+    sys.argv.remove(sys.argv[1])
+    from algos.og_ppo import run_experiment
+    parser.add_argument("--seed", type=int, default=1,
+                        help="RNG seed")
+    parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
+                        help="Where to log diagnostics to")
+    parser.add_argument("--name", type=str, default="model")
+    parser.add_argument("--env_name", type=str, default="Cassie-v0")
+    parser.add_argument("--gamma", default=0.99)
+    parser.add_argument("--lam", default=0.0)
+    parser.add_argument("--lr", default=3e-4)
+    parser.add_argument("--eps", default=1e-5)
+    parser.add_argument("--entropy_coeff", default=0.0)
+    parser.add_argument("--clip", default=0.2)
+    parser.add_argument("--batch_size", default=64)
+    parser.add_argument("--epochs", default=10)
+    parser.add_argument("--num_steps", default=5096)
+    parser.add_argument("--n_itr", default=10000)
+    parser.add_argument("--use_gae", default=False)
+
+
+    args = parser.parse_args()
     run_experiment(args)
   else:
     print("Invalid algorithm '{}'".format(sys.argv[1]))

@@ -57,7 +57,7 @@ class ReplayBuffer():
     not_dones   = self.not_done[start_idx:end_idx]
 
     # Return an entire episode
-    return traj_states, actions, next_states, rewards, not_dones
+    return traj_states, actions, next_states, rewards, not_dones, None
 
   def sample(self, batch_size, sample_trajectories=False, max_len=1000):
     if sample_trajectories:
@@ -72,14 +72,18 @@ class ReplayBuffer():
       rewards     = [traj[3] for traj in raw_traj]
       not_dones   = [traj[4] for traj in raw_traj]
 
+      # Get the trajectory mask for the critic
+      traj_mask = [torch.ones_like(reward) for reward in rewards]
+
       # Pad all trajectories to be the same length, shape is (traj_len x batch_size x dim)
       states      = pad_sequence(states, batch_first=False)
       actions     = pad_sequence(actions, batch_first=False)
       next_states = pad_sequence(next_states, batch_first=False)
       rewards     = pad_sequence(rewards, batch_first=False)
       not_dones   = pad_sequence(not_dones, batch_first=False)
+      traj_mask   = pad_sequence(traj_mask, batch_first=False)
 
-      return states, actions, next_states, rewards, not_dones, steps
+      return states, actions, next_states, rewards, not_dones, steps, traj_mask
 
     else:
       idx = np.random.randint(0, self.size, size=batch_size)
@@ -117,7 +121,7 @@ class DPG():
       target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
   def update_policy(self, replay_buffer, batch_size=256, traj_len=1000, grad_clip=None):
-    states, actions, next_states, rewards, not_dones, steps = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
+    states, actions, next_states, rewards, not_dones, steps, mask = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
 
     with torch.no_grad():
       if self.normalize:
@@ -125,7 +129,25 @@ class DPG():
         next_states = self.behavioral_actor.normalize_state(next_states, update=False)
 
       target_q = rewards + (not_dones * self.discount * self.target_critic(next_states, self.target_actor(next_states)))
-    current_q = self.behavioral_critic(states, actions)
+
+      #print(states[4].size(0))
+      #for i in range(states[:,4].size(0)):
+      #  print("STATE {}: {}".format(i, states[:,4][i]))
+      #print(states.size())
+      #for i, target in enumerate(target_q[:,4]):
+      #  print("TARGET {}: {}".format(i, target))
+
+      #print(target_q.size())
+      #input()
+
+    if mask is None:
+      mask = 1
+
+    current_q = self.behavioral_critic(states, actions) * mask
+
+    #for i, target in enumerate(current_q[:,4]):
+    #  print("ACTUAL {}: {}".format(i, target))
+
 
     critic_loss = F.mse_loss(current_q, target_q)
 

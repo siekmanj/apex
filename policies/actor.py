@@ -78,7 +78,7 @@ class FF_Stochastic_Actor(Actor):
     self.means = nn.Linear(layers[-1], action_dim)
 
     if fixed_std is None:
-      self.stds = nn.Linear(layers[-1], action_dim)
+      self.log_stds = nn.Linear(layers[-1], action_dim)
       self.learn_std = True
     else:
       self.fixed_std = fixed_std
@@ -105,7 +105,7 @@ class FF_Stochastic_Actor(Actor):
     mu = torch.tanh(self.means(x))
 
     if self.learn_std:
-      sd = torch.relu(self.stds(x)) + 1e-3
+      sd = torch.clamp(self.log_stds(x), -20, 2).exp()
     else:
       sd = self.fixed_std
 

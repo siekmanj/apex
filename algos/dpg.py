@@ -57,7 +57,7 @@ class ReplayBuffer():
     not_dones   = self.not_done[start_idx:end_idx]
 
     # Return an entire episode
-    return traj_states, actions, next_states, rewards, not_dones, None
+    return traj_states, actions, next_states, rewards, not_dones, 1
 
   def sample(self, batch_size, sample_trajectories=False, max_len=1000):
     if sample_trajectories:
@@ -139,9 +139,6 @@ class DPG():
 
       #print(target_q.size())
       #input()
-
-    if mask is None:
-      mask = 1
 
     current_q = self.behavioral_critic(states, actions) * mask
 
@@ -320,9 +317,9 @@ def run_experiment(args):
     if done:
       episode_elapsed = (time() - episode_start)
       episode_secs_per_sample = episode_elapsed / episode_timesteps
-      logger.add_scalar(args.env_name + ' episode length', episode_timesteps, iter)
-      logger.add_scalar(args.env_name + ' episode reward', episode_reward, iter)
-      logger.add_scalar(args.env_name + ' critic loss', episode_loss, iter)
+      logger.add_scalar(args.env_name + '/episode_length', episode_timesteps, iter)
+      logger.add_scalar(args.env_name + '/episode_return', episode_reward, iter)
+      logger.add_scalar(args.env_name + '/critic loss', episode_loss, iter)
 
       completion = 1 - float(timesteps) / args.timesteps
       avg_sample_r = (time() - training_start)/timesteps
@@ -332,8 +329,8 @@ def run_experiment(args):
 
       if iter % args.eval_every == 0 and iter != 0:
         eval_reward = eval_policy(algo.behavioral_actor, eval_env, max_traj_len=args.traj_len)
-        logger.add_scalar(args.env_name + ' eval episode', eval_reward, iter)
-        logger.add_scalar(args.env_name + ' eval timestep', eval_reward, timesteps)
+        logger.add_scalar(args.env_name + '/return', eval_reward, iter)
+        #logger.add_scalar(args.env_name + '', eval_reward, timesteps)
 
         print("evaluation after {:4d} episodes | return: {:7.3f} | timesteps {:9n}{:100s}".format(iter, eval_reward, timesteps, ''))
 

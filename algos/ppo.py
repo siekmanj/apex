@@ -91,7 +91,24 @@ class Buffer:
       self._finish_buffer()
 
     if recurrent:
-      raise NotImplementedError
+      random_indices = SubsetRandomSampler(range(len(self.traj_idx)-1))
+      sampler = BatchSampler(random_indices, batch_size, drop_last=True)
+
+      for i, traj_indices in enumerate(sampler):
+        states = [self.states[self.traj_idx[i]:self.traj_idx[i+1]] for i in traj_indices]
+        actions = [self.actions[self.traj_idx[i]:self.traj_idx[i+1]] for i in traj_indices]
+        returns = [self.returns[self.traj_idx[i]:self.traj_idx[i+1]] for i in traj_indices]
+        advantages = [self.advantages[self.traj_idx[i]:self.traj_idx[i+1]] for i in traj_indices]
+        traj_mask = [torch.ones_like(r) for r in returns]
+
+        states     = pad_sequence(states, batch_first=False)
+        actions    = pad_sequence(actions, batch_first=False)
+        returns    = pad_sequence(returns, batch_first=False)
+        advantages = pad_sequence(advantages, batch_first=False)
+        traj_mask  = pad_sequence(traj_mask, batch_first=False)
+
+        yield states, actions, returns, advantages, traj_mask
+
     else:
       random_indices = SubsetRandomSampler(range(self.size))
       sampler = BatchSampler(random_indices, batch_size, drop_last=True)
@@ -102,7 +119,7 @@ class Buffer:
         returns    = self.returns[idxs]
         advantages = self.advantages[idxs]
 
-        yield states, actions, returns, advantages
+        yield states, actions, returns, advantages, 1
 
 @ray.remote
 class PPO_Worker:
@@ -136,6 +153,12 @@ class PPO_Worker:
       value = 0
       traj_len = 0
 
+      if hasattr(actor, 'init_hidden_state'):
+        actor.init_hidden_state()
+
+      if hasattr(critic, 'init_hidden_state'):
+        critic.init_hidden_state()
+
       while not done and traj_len < max_traj_len:
           state = torch.Tensor(state)
           norm_state = actor.normalize_state(state, update=False)
@@ -152,10 +175,7 @@ class PPO_Worker:
           traj_len += 1
           num_steps += 1
 
-      #print("END STATE: done {}, traj {} of {}".format(done, traj_len, max_traj_len))
       value = (not done) * critic(torch.Tensor(state)).numpy()
-
-      #print("TRAJECTORY OVER, PASSING IN VALUE {}".format(value))
       memory.end_trajectory(terminal_value=value)
 
     return memory
@@ -167,9 +187,13 @@ class PPO:
       self.old_actor = deepcopy(actor)
       self.critic = critic
 
+      if actor.is_recurrent or critic.is_recurrent:
+        self.recurrent = True
+      else:
+        self.recurrent = False
+
       self.actor_optim = optim.Adam(self.actor.parameters(), lr=a_lr, eps=eps)
       self.critic_optim = optim.Adam(self.critic.parameters(), lr=c_lr, eps=eps)
-
       self.env_fn = env_fn
       self.discount = discount
       self.entropy_coeff = entropy_coeff
@@ -184,13 +208,13 @@ class PPO:
       #self.workers = [PPO_Worker.remote(env_fn, discount) for _ in range(workers)]
       self.workers = [PPO_Worker.remote(env_fn, discount) for _ in range(workers)]
 
-    def update_policy(self, states, actions, returns, advantages):
+    def update_policy(self, states, actions, returns, advantages, mask):
       with torch.no_grad():
         states = self.actor.normalize_state(states, update=False)
         old_pdf = self.old_actor.pdf(states)
         old_log_probs = old_pdf.log_prob(actions).sum(-1, keepdim=True)
 
-      values = self.critic(states)
+      values = self.critic(states) * mask
       pdf = self.actor.pdf(states)
       
       log_probs = pdf.log_prob(actions).sum(-1, keepdim=True)
@@ -199,11 +223,11 @@ class PPO:
 
       cpi_loss = ratio * advantages
       clip_loss = ratio.clamp(0.8, 1.2) * advantages
-      actor_loss = -torch.min(cpi_loss, clip_loss).mean()
+      actor_loss = -(torch.min(cpi_loss, clip_loss) * mask).mean()
 
-      critic_loss = 0.5 * (returns - values).pow(2).mean()
+      critic_loss = 0.5 * ((returns - values) * mask).pow(2).mean()
 
-      entropy_penalty = -self.entropy_coeff * pdf.entropy().mean()
+      entropy_penalty = -(self.entropy_coeff * pdf.entropy() * mask).mean()
 
       self.actor_optim.zero_grad()
       self.critic_optim.zero_grad()
@@ -271,10 +295,10 @@ class PPO:
       c_loss = []
       done = False
       for epoch in range(epochs):
-        for batch in memory.sample():
-          states, actions, returns, advantages = batch
+        for batch in memory.sample(recurrent=self.recurrent):
+          states, actions, returns, advantages, mask = batch
           
-          kl, losses = self.update_policy(states, actions, returns, advantages)
+          kl, losses = self.update_policy(states, actions, returns, advantages, mask)
           kls += [kl]
           a_loss += [losses[0]]
           c_loss += [losses[1]]
@@ -336,8 +360,12 @@ def run_experiment(args):
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    policy = FF_Stochastic_Actor(obs_dim, action_dim, env_name=args.env_name, fixed_std=torch.ones(action_dim)*args.std)
-    critic = FF_V(obs_dim)
+    if args.recurrent:
+      policy = LSTM_Stochastic_Actor(obs_dim, action_dim, env_name=args.env_name, fixed_std=torch.ones(action_dim)*args.std)
+      critic = LSTM_V(obs_dim)
+    else:
+      policy = FF_Stochastic_Actor(obs_dim, action_dim, env_name=args.env_name, fixed_std=torch.ones(action_dim)*args.std)
+      critic = FF_V(obs_dim)
 
     env = env_fn()
     eval_policy(policy, env, True, min_timesteps=args.prenormalize_steps, max_traj_len=args.traj_len, noise=1)

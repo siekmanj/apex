@@ -95,9 +95,6 @@ class FF_Stochastic_Actor(Actor):
 
   def _get_dist_params(self, state):
 
-    if hasattr(self, 'obs_mean') and hasattr(self, 'obs_std'):
-      state = (state - self.obs_mean) / self.obs_std
-
     x = state
     for idx, layer in enumerate(self.actor_layers):
       x = self.nonlinearity(layer(x))
@@ -109,7 +106,6 @@ class FF_Stochastic_Actor(Actor):
     else:
       sd = self.fixed_std
 
-    #print("RETURNED MEAN {}, SD {}".format(mu, sd))
     return mu, sd
 
   def forward(self, state, deterministic=True):
@@ -166,8 +162,9 @@ class LSTM_Actor(Actor):
     self.cells  = [torch.zeros(batch_size, l.hidden_size) for l in self.actor_layers]
 
   def forward(self, x):
+    dims = len(x.size())
 
-    if len(x.size()) == 3: # if we get a batch of trajectories
+    if dims == 3: # if we get a batch of trajectories
       self.init_hidden_state(batch_size=x.size(1))
       action = []
       for t, x_t in enumerate(x):
@@ -182,26 +179,9 @@ class LSTM_Actor(Actor):
       x = torch.stack([a.float() for a in action])
       self.action = x
 
-    elif len(x.size()) == 2: # if we get a whole trajectory
-      self.init_hidden_state()
-
-      self.action = []
-      for t, x_t in enumerate(x):
-        x_t = x_t.view(1, -1)
-
-        for idx, layer in enumerate(self.actor_layers):
-          h, c = self.hidden[idx], self.cells[idx]
-          self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
-          x_t = self.hidden[idx]
-        x_t = self.nonlinearity(self.network_out(x_t))
-        self.action.append(x_t)
-
-      x = torch.cat([a.float() for a in self.action])
-      self.action = x
-
-
-    elif len(x.size()) == 1: # if we get a single timestep
-      x = x.view(1, -1)
+    else:
+      if dims == 1: # if we get a single timestep (if not, assume we got a batch of single timesteps)
+        x = x.view(1, -1)
 
       for idx, layer in enumerate(self.actor_layers):
         h, c = self.hidden[idx], self.cells[idx]
@@ -210,11 +190,82 @@ class LSTM_Actor(Actor):
       x = self.nonlinearity(self.network_out(x))[0]
       self.action = x
 
-    else:
-      print("Invalid input dimensions.")
-      exit(1)
-
     return x
   
+  def get_action(self):
+    return self.action
+
+def LSTM_Stochastic_Actor(Actor):
+  def __init__(self, state_dim, action_dim, layers=(128, 128), env_name=None, nonlinearity=F.relu, normc_init=False, max_action=1, fixed_std=None):
+    super(LSTM_Stochastic_Actor, self).__init__()
+
+    self.actor_layers = nn.ModuleList()
+    self.actor_layers += [nn.LSTMCell(input_dim, layers[0])]
+    for i in range(len(layers)-1):
+        self.actor_layers += [nn.LSTMCell(layers[i], layers[i+1])]
+    self.network_out = nn.Linear(layers[i-1], action_dim)
+
+    self.action = None
+    self.action_dim = action_dim
+    self.init_hidden_state()
+    self.env_name = env_name
+    self.nonlinearity = nonlinearity
+    self.max_action = max_action
+    
+    self.is_recurrent = True
+
+    if normc_init:
+      self.initialize_parameters()
+
+  def _get_dist_params(self, state):
+    dims = len(state.size())
+
+    x = state
+    if dims == 3: # if we get a batch of trajectories
+      self.init_hidden_state(batch_size=x.size(1))
+      action = []
+      for t, x_t in enumerate(x):
+
+        for idx, layer in enumerate(self.actor_layers):
+          c, h = self.cells[idx], self.hidden[idx]
+          self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
+          x_t = self.hidden[idx]
+        x_t = self.network_out(x_t)
+        action.append(x_t)
+
+      x = torch.stack([a.float() for a in action])
+
+    else:
+      if dims == 1: # if we get a single timestep (if not, assume we got a batch of single timesteps)
+        x = x.view(1, -1)
+
+      for idx, layer in enumerate(self.actor_layers):
+        h, c = self.hidden[idx], self.cells[idx]
+        self.hidden[idx], self.cells[idx] = layer(x, (h, c))
+        x = self.hidden[idx]
+      x = self.nonlinearity(self.network_out(x))[0]
+
+    mu = x
+    if self.learn_std:
+      sd = torch.clamp(self.log_stds(x), -20, 2).exp()
+    else:
+      sd = self.fixed_std
+
+    return mu, sd
+
+  def forward(self, state, deterministic=True):
+    mu, sd = self._get_dist_params(state)
+
+    if not deterministic:
+      self.action = torch.distributions.Normal(mu, sd).sample()
+    else:
+      self.action = mu
+
+    return self.action
+
+  def pdf(self, state):
+    mu, sd = self._get_dist_params(state)
+    return torch.distributions.Normal(mu, sd)
+
   def get_action(self):
     return self.action

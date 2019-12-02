@@ -87,7 +87,7 @@ class ReplayBuffer():
 
     else:
       idx = np.random.randint(0, self.size, size=batch_size)
-      return self.state[idx], self.action[idx], self.next_state[idx], self.reward[idx], self.not_done[idx], batch_size
+      return self.state[idx], self.action[idx], self.next_state[idx], self.reward[idx], self.not_done[idx], batch_size, 1
 
 class DPG():
   def __init__(self, actor, critic, a_lr, c_lr, discount=0.99, tau=0.001, center_reward=False, normalize=False):
@@ -130,23 +130,13 @@ class DPG():
 
       target_q = rewards + (not_dones * self.discount * self.target_critic(next_states, self.target_actor(next_states)))
 
-      #print(states[4].size(0))
-      #for i in range(states[:,4].size(0)):
-      #  print("STATE {}: {}".format(i, states[:,4][i]))
-      #print(states.size())
-      #for i, target in enumerate(target_q[:,4]):
-      #  print("TARGET {}: {}".format(i, target))
-
-      #print(target_q.size())
-      #input()
-
-    current_q = self.behavioral_critic(states, actions) * mask
+    current_q = self.behavioral_critic(states, actions)
 
     #for i, target in enumerate(current_q[:,4]):
     #  print("ACTUAL {}: {}".format(i, target))
 
 
-    critic_loss = F.mse_loss(current_q, target_q)
+    critic_loss = F.mse_loss(current_q * mask, target_q * mask)
 
     self.critic_optimizer.zero_grad()
     critic_loss.backward()
@@ -156,7 +146,7 @@ class DPG():
 
     self.critic_optimizer.step()
 
-    actor_loss = -self.behavioral_critic(states, self.behavioral_actor(states)).mean()
+    actor_loss = -(self.behavioral_critic(states, self.behavioral_actor(states) * mask) * mask).mean()
 
     self.actor_optimizer.zero_grad()
     actor_loss.backward()

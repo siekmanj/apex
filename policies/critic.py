@@ -163,11 +163,13 @@ class LSTM_Q(Critic):
     self.cells  = [torch.zeros(batch_size, l.hidden_size) for l in self.critic_layers]
   
   def forward(self, state, action):
+    dims = len(state.size())
+
     if len(state.size()) != len(action.size()):
       print("state and action must have same number of dimensions: {} vs {}", state.size(), action.size())
       exit(1)
 
-    if len(state.size()) == 3: # if we get a batch of trajectories
+    if dims == 3: # if we get a batch of trajectories
       self.init_hidden_state(batch_size=state.size(1))
       value = []
       for t, (state_batch_t, action_batch_t) in enumerate(zip(state, action)):
@@ -182,26 +184,11 @@ class LSTM_Q(Critic):
 
       x = torch.stack([a.float() for a in value])
 
-    elif len(state.size()) == 2: # if we get a trajectory
-      self.init_hidden_state()
+    else:
 
-      value = []
-      for t, (state_t, action_t) in enumerate(zip(state, action)):
-        x_t = torch.cat([state_t, action_t])
-        x_t = x_t.view(1, -1)
-
-        for idx, layer in enumerate(self.critic_layers):
-          c, h = self.cells[idx], self.hidden[idx]
-          self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
-          x_t = self.hidden[idx]
-        x_t = self.network_out(x_t)
-        value.append(x_t)
-
-      x = torch.cat([a.float() for a in value])
-
-    elif len(state.size()) == 1: # if we get a single timestep
-      x = torch.cat([state_t, action_t], 1)
-      x = x.view(1, -1)
+      x = torch.cat([state, action], len(state_t.size()))
+      if dims == 1:
+        x = x.view(1, -1)
 
       for idx, layer in enumerate(self.critic_layers):
         c, h = self.cells[idx], self.hidden[idx]
@@ -209,7 +196,59 @@ class LSTM_Q(Critic):
         x = self.hidden[idx]
       x = self.network_out(x)
 
+    return x
+
+class LSTM_V(Critic):
+  def __init__(self, input_dim, layers=(128, 128), env_name='NOT SET', normc_init=True):
+    super(LSTM_Q, self).__init__()
+
+    self.critic_layers = nn.ModuleList()
+    self.critic_layers += [nn.LSTMCell(input_dim, layers[0])]
+    for i in range(len(layers)-1):
+        self.critic_layers += [nn.LSTMCell(layers[i], layers[i+1])]
+    self.network_out = nn.Linear(layers[-1], 1)
+
+    self.init_hidden_state()
+
+    self.is_recurrent = True
+    self.env_name = env_name
+
+    if normc_init:
+      self.initialize_parameters()
+
+  def get_hidden_state(self):
+    return self.hidden, self.cells
+
+  def init_hidden_state(self, batch_size=1):
+    self.hidden = [torch.zeros(batch_size, l.hidden_size) for l in self.critic_layers]
+    self.cells  = [torch.zeros(batch_size, l.hidden_size) for l in self.critic_layers]
+  
+  def forward(self, state):
+    dims = len(state.size())
+
+    if dims == 3: # if we get a batch of trajectories
+      self.init_hidden_state(batch_size=state.size(1))
+      value = []
+      for t, state_batch_t in enumerate(state):
+        x_t = state_batch_t
+        for idx, layer in enumerate(self.critic_layers):
+          c, h = self.cells[idx], self.hidden[idx]
+          self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
+          x_t = self.hidden[idx]
+        x_t = self.network_out(x_t)
+        value.append(x_t)
+
+      x = torch.stack([a.float() for a in value])
+
     else:
-      print("Invalid input dimensions.")
-      exit(1)
+      x = state
+      if dims == 1:
+        x = x.view(1, -1)
+
+      for idx, layer in enumerate(self.critic_layers):
+        c, h = self.cells[idx], self.hidden[idx]
+        self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
+        x = self.hidden[idx]
+      x = self.network_out(x)
+
     return x

@@ -195,7 +195,6 @@ if __name__ == "__main__":
     parser.add_argument("--traj_len",       "-tl",  default=1000,  type=int)      # max trajectory length for environment
     parser.add_argument("--center_reward",  "-r",   action='store_true')          # normalize rewards to a normal distribution
     parser.add_argument("--normc_init",             default=True,  type=bool)     # using col norm to init weights
-    parser.add_argument("--normalize",              action='store_true')          # normalize states online
     parser.add_argument("--normalize"       '-n',   action='store_true')          # normalize states online
     parser.add_argument("--batch_size",             default=64,    type=int)      # batch size for policy update
     parser.add_argument("--updates",                default=1,    type=int)       # (if recurrent) number of times to update policy per episode
@@ -278,6 +277,7 @@ if __name__ == "__main__":
     parser.add_argument("--traj_len",       "-tl",  default=400,           type=int)      # max trajectory length for environment
     parser.add_argument("--prenormalize_steps",     default=10000,         type=int)      
     parser.add_argument("--num_steps",              default=5000,          type=int)      
+    parser.add_argument("--recurrent",              action='store_true')
 
     parser.add_argument('--discount',               default=0.99,          type=float)    # the discount factor
     parser.add_argument('--std',                    default=0.13,          type=float)    # the fixed exploration std

@@ -146,12 +146,14 @@ class Buffer:
 
 @ray.remote
 class PPO_Worker:
-  def __init__(self, env_fn, gamma):
+  #def __init__(self, env_fn, gamma):
+  def __init__(self, actor, critic, env_fn, gamma):
     torch.set_num_threads(1)
     self.env = env_fn()
     self.gamma = gamma
+    self.actor = deepcopy(actor)
+    self.critic = deepcopy(critic)
 
-  """
   def update_policy(self, new_actor_params, new_critic_params, input_norm=None):
     for p, new_p in zip(self.actor.parameters(), new_actor_params):
       p.data.copy_(new_p)
@@ -162,13 +164,15 @@ class PPO_Worker:
     if input_norm is not None:
       self.actor.welford_state_mean, self.actor.welford_state_mean_diff, self.actor.welford_state_n = input_norm
 
-  """
-
-  def collect_experience(self, actor, critic, max_traj_len, min_steps):
+  #def collect_experience(self, actor, critic, max_traj_len, min_steps):
+  def collect_experience(self, max_traj_len, min_steps):
     start = time()
 
     num_steps = 0
     memory = Buffer(self.gamma)
+    actor  = self.actor
+    critic = self.critic
+
     while num_steps < min_steps:
       state = torch.Tensor(self.env.reset())
 
@@ -232,7 +236,7 @@ class PPO:
           ray.init(num_cpus=workers)
 
       #self.workers = [PPO_Worker.remote(env_fn, discount) for _ in range(workers)]
-      self.workers = [PPO_Worker.remote(env_fn, discount) for _ in range(workers)]
+      self.workers = [PPO_Worker.remote(actor, critic, env_fn, discount) for _ in range(workers)]
 
     def update_policy(self, states, actions, returns, advantages, mask):
       with torch.no_grad():
@@ -296,22 +300,20 @@ class PPO:
       self.old_actor.load_state_dict(self.actor.state_dict())
 
       start = time()
-      #actor_param_id  = ray.put(list(self.actor.parameters()))
-      #critic_param_id = ray.put(list(self.critic.parameters()))
-      #norm_id = ray.put([self.actor.welford_state_mean, self.actor.welford_state_mean_diff, self.actor.welford_state_n])
-      #if verbose:
-      #  print("\tDEBUG: {:5.4f}s to place policy params in shared memory.".format(time() - start))
+      actor_param_id  = ray.put(list(self.actor.parameters()))
+      critic_param_id = ray.put(list(self.critic.parameters()))
+      norm_id = ray.put([self.actor.welford_state_mean, self.actor.welford_state_mean_diff, self.actor.welford_state_n])
 
       steps = num_steps // len(self.workers)
 
-      #start = time()
-      #for w in self.workers:
-      #  w.update_policy.remote(actor_param_id, critic_param_id, input_norm=norm_id)
-      #if verbose:
-      #  print("\tDEBUG: {:5.4f}s to copy policy params to workers.".format(time() - start))
+      for w in self.workers:
+        w.update_policy.remote(actor_param_id, critic_param_id, input_norm=norm_id)
+      if verbose:
+        print("\t{:5.4f}s to copy policy params to workers.".format(time() - start))
 
       start = time()
-      buffers = ray.get([w.collect_experience.remote(self.actor, self.critic, max_traj_len, steps) for w in self.workers])
+      #buffers = ray.get([w.collect_experience.remote(self.actor, self.critic, max_traj_len, steps) for w in self.workers])
+      buffers = ray.get([w.collect_experience.remote(max_traj_len, steps) for w in self.workers])
       memory = self.merge_buffers(buffers)
 
       total_steps = len(memory)

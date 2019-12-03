@@ -195,12 +195,12 @@ class LSTM_Actor(Actor):
   def get_action(self):
     return self.action
 
-def LSTM_Stochastic_Actor(Actor):
+class LSTM_Stochastic_Actor(Actor):
   def __init__(self, state_dim, action_dim, layers=(128, 128), env_name=None, nonlinearity=F.relu, normc_init=False, max_action=1, fixed_std=None):
     super(LSTM_Stochastic_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
-    self.actor_layers += [nn.LSTMCell(input_dim, layers[0])]
+    self.actor_layers += [nn.LSTMCell(state_dim, layers[0])]
     for i in range(len(layers)-1):
         self.actor_layers += [nn.LSTMCell(layers[i], layers[i+1])]
     self.network_out = nn.Linear(layers[i-1], action_dim)
@@ -213,6 +213,13 @@ def LSTM_Stochastic_Actor(Actor):
     self.max_action = max_action
     
     self.is_recurrent = True
+
+    if fixed_std is None:
+      self.log_stds = nn.Linear(layers[-1], action_dim)
+      self.learn_std = True
+    else:
+      self.fixed_std = fixed_std
+      self.learn_std = False
 
     if normc_init:
       self.initialize_parameters()
@@ -252,6 +259,10 @@ def LSTM_Stochastic_Actor(Actor):
       sd = self.fixed_std
 
     return mu, sd
+
+  def init_hidden_state(self, batch_size=1):
+    self.hidden = [torch.zeros(batch_size, l.hidden_size) for l in self.actor_layers]
+    self.cells  = [torch.zeros(batch_size, l.hidden_size) for l in self.actor_layers]
 
   def forward(self, state, deterministic=True):
     mu, sd = self._get_dist_params(state)

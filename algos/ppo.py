@@ -8,15 +8,14 @@ import torch.optim as optim
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 from torch.distributions import kl_divergence
 
+from torch.nn.utils.rnn import pad_sequence
+
 from time import time
 
 import numpy as np
 import os
 
 import ray
-
-from policies.critic import Critic, FF_V
-from policies.actor import Actor, FF_Stochastic_Actor
 
 class Buffer:
   def __init__(self, discount=0.99):
@@ -80,6 +79,8 @@ class Buffer:
     self.rewards = torch.Tensor(self.rewards)
     self.returns = torch.Tensor(self.returns)
     self.values  = torch.Tensor(self.values)
+
+    #print("BUFFER DONE, {}, {}, {}, {}".format(self.states.size(), self.actions.size(), self.rewards.size(), self.values.size()))
         
     a = self.returns - self.values
     a = (a - a.mean()) / (a.std() + 1e-4)
@@ -91,22 +92,43 @@ class Buffer:
       self._finish_buffer()
 
     if recurrent:
+      #print("SAMPLING RECURRENTS!")
       random_indices = SubsetRandomSampler(range(len(self.traj_idx)-1))
       sampler = BatchSampler(random_indices, batch_size, drop_last=True)
 
-      for i, traj_indices in enumerate(sampler):
-        states = [self.states[self.traj_idx[i]:self.traj_idx[i+1]] for i in traj_indices]
-        actions = [self.actions[self.traj_idx[i]:self.traj_idx[i+1]] for i in traj_indices]
-        returns = [self.returns[self.traj_idx[i]:self.traj_idx[i+1]] for i in traj_indices]
-        advantages = [self.advantages[self.traj_idx[i]:self.traj_idx[i+1]] for i in traj_indices]
-        traj_mask = [torch.ones_like(r) for r in returns]
+      #print("{} batches in sampler out of {} total trajectories.".format(len(sampler), len(self.traj_idx)))
 
+      for traj_indices in sampler:
+        #print("SAMPLING {} trajectories:".format(len(traj_indices)))
+        states     = [self.states[self.traj_idx[i]:self.traj_idx[i+1]]          for i in traj_indices]
+        actions    = [self.actions[self.traj_idx[i]:self.traj_idx[i+1]]         for i in traj_indices]
+        returns    = [self.returns[self.traj_idx[i]:self.traj_idx[i+1]]         for i in traj_indices]
+        advantages = [self.advantages[self.traj_idx[i]:self.traj_idx[i+1]]      for i in traj_indices]
+        traj_mask  = [torch.ones_like(r) for r in returns]
+
+        total_steps = sum([self.traj_idx[i+1] - self.traj_idx[i] for i in traj_indices[:-1]])
+        #print("TOTAL STEPS IN THIS BATCH: {}".format(total_steps))
+
+        """
+        for r in returns:
+          print("GOT R {}, LOOKS LIKE {}, SIZE {}, SIZE {}".format(r[:,0], torch.ones_like(r[:,0]), r[:,0].size(), torch.ones_like(r[:,0]).size()))
+          input()
+
+        for r in returns:
+          print("GOT RETURN TRAJ")
+          print(self.returns[self.traj_idx[0]:self.traj_idx[1]])
+          print("Vs:")
+          print(self.returns[self.traj_idx[0]:self.traj_idx[0+1]+1])
+          input()
+
+        """
         states     = pad_sequence(states, batch_first=False)
         actions    = pad_sequence(actions, batch_first=False)
         returns    = pad_sequence(returns, batch_first=False)
         advantages = pad_sequence(advantages, batch_first=False)
         traj_mask  = pad_sequence(traj_mask, batch_first=False)
 
+        #print("YIELDING STATE {}, ACTIONS {}, RETURNS {}, ADV {}, TRAJ MASK {}".format(states.size(), actions.size(), returns.size(), advantages.size(), traj_mask.size()))
         yield states, actions, returns, advantages, traj_mask
 
     else:
@@ -115,10 +137,11 @@ class Buffer:
 
       for i, idxs in enumerate(sampler):
         states     = self.states[idxs]
-        actions    = self.actions[idxs] 
+        actions    = self.actions[idxs]
         returns    = self.returns[idxs]
         advantages = self.advantages[idxs]
 
+        #print("TOTAL STEPS IN THIS BATCH: {}".format(len(idxs)))
         yield states, actions, returns, advantages, 1
 
 @ray.remote
@@ -164,6 +187,7 @@ class PPO_Worker:
           norm_state = actor.normalize_state(state, update=False)
           action = actor(norm_state, False)
           value = critic(norm_state)
+
           next_state, reward, done, _ = self.env.step(action.numpy())
 
           reward = np.array([reward])
@@ -176,6 +200,7 @@ class PPO_Worker:
           num_steps += 1
 
       value = (not done) * critic(torch.Tensor(state)).numpy()
+      #print("GOT FINAL VAL OF {} BECAUSE DONE WAS {}".format(value, done))
       memory.end_trajectory(terminal_value=value)
 
     return memory
@@ -187,7 +212,8 @@ class PPO:
       self.old_actor = deepcopy(actor)
       self.critic = critic
 
-      if actor.is_recurrent or critic.is_recurrent:
+      #if actor.is_recurrent or critic.is_recurrent:
+      if True:
         self.recurrent = True
       else:
         self.recurrent = False
@@ -214,6 +240,7 @@ class PPO:
         old_pdf = self.old_actor.pdf(states)
         old_log_probs = old_pdf.log_prob(actions).sum(-1, keepdim=True)
 
+      #print("STATES {} VS MASK SIZE: {}".format(states.size(), mask.size()))
       values = self.critic(states) * mask
       pdf = self.actor.pdf(states)
       
@@ -221,6 +248,9 @@ class PPO:
       
       ratio = (log_probs - old_log_probs).exp()
 
+      #print("GOT RATIO SIZE {}, ADVATNAGES {}".format(ratio.size(), advantages.size()))
+      #print(ratio)
+      #input()
       cpi_loss = ratio * advantages
       clip_loss = ratio.clamp(0.8, 1.2) * advantages
       actor_loss = -(torch.min(cpi_loss, clip_loss) * mask).mean()
@@ -262,7 +292,7 @@ class PPO:
         memory.size     += b.size
       return memory
 
-    def do_iteration(self, num_steps, max_traj_len, epochs, kl_thresh=0.02, verbose=True):
+    def do_iteration(self, num_steps, max_traj_len, epochs, kl_thresh=0.02, verbose=True, batch_size=64):
       self.old_actor.load_state_dict(self.actor.state_dict())
 
       start = time()
@@ -295,7 +325,7 @@ class PPO:
       c_loss = []
       done = False
       for epoch in range(epochs):
-        for batch in memory.sample(recurrent=self.recurrent):
+        for batch in memory.sample(batch_size=batch_size, recurrent=self.recurrent):
           states, actions, returns, advantages, mask = batch
           
           kl, losses = self.update_policy(states, actions, returns, advantages, mask)
@@ -305,10 +335,10 @@ class PPO:
 
           if max(kls) > kl_thresh:
               done = True
-              print("\t\tMax kl reached, stopping optimization early.")
+              print("\t\tbatch had kl of {} (threshold {}), stopping optimization early.".format(max(kls), kl_thresh))
               break
         if verbose:
-          print("\t\tepoch {:2d} kl {:4.3f}, actor loss {:6.3f}, critic loss {:6.3f}".format(epoch, np.mean(kls), np.mean(a_loss), np.mean(c_loss)))
+          print("\t\tepoch {:2d} kl {:4.3f}, actor loss {:6.3f}, critic loss {:6.3f}".format(epoch+1, np.mean(kls), np.mean(a_loss), np.mean(c_loss)))
         if done:
           break
 
@@ -325,6 +355,9 @@ def eval_policy(policy, env, update_normalizer, min_timesteps=2000, max_traj_len
       done = False
       traj_len = 0
       ep_return = 0
+
+      if hasattr(policy, 'init_hidden_state'):
+        policy.init_hidden_state()
 
       while not done and traj_len < max_traj_len:
         state = policy.normalize_state(state, update=update_normalizer)
@@ -348,6 +381,10 @@ def run_experiment(args):
     torch.set_num_threads(1)
 
     from rrl import env_factory, create_logger
+
+    from policies.critic import FF_V, LSTM_V
+    from policies.actor import FF_Stochastic_Actor, LSTM_Stochastic_Actor
+
     import locale, os
     locale.setlocale(locale.LC_ALL, '')
 
@@ -406,7 +443,7 @@ def run_experiment(args):
     timesteps = 0
     best_reward = None
     while timesteps < args.timesteps:
-      kl, a_loss, c_loss, steps = algo.do_iteration(args.num_steps, args.traj_len, args.epochs)
+      kl, a_loss, c_loss, steps = algo.do_iteration(args.num_steps, args.traj_len, args.epochs, batch_size=args.batch_size, kl_thresh=0.1)
       eval_reward = eval_policy(algo.actor, env, False, min_timesteps=args.traj_len*5, max_traj_len=args.traj_len, verbose=False)
 
       timesteps += steps

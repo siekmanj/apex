@@ -135,6 +135,7 @@ class FF_V(Critic):
     for idx, layer in enumerate(self.critic_layers):
       x = F.relu(layer(x))
 
+    #print("FF_V is returning size {} from input {}".format(x.size(), state.size()))
     return self.network_out(x)
 
 class LSTM_Q(Critic):
@@ -195,12 +196,15 @@ class LSTM_Q(Critic):
         self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
         x = self.hidden[idx]
       x = self.network_out(x)
+      
+      if dims == 1:
+        x = x.view(-1)
 
     return x
 
 class LSTM_V(Critic):
   def __init__(self, input_dim, layers=(128, 128), env_name='NOT SET', normc_init=True):
-    super(LSTM_Q, self).__init__()
+    super(LSTM_V, self).__init__()
 
     self.critic_layers = nn.ModuleList()
     self.critic_layers += [nn.LSTMCell(input_dim, layers[0])]
@@ -247,8 +251,12 @@ class LSTM_V(Critic):
 
       for idx, layer in enumerate(self.critic_layers):
         c, h = self.cells[idx], self.hidden[idx]
-        self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
+        self.hidden[idx], self.cells[idx] = layer(x, (h, c))
         x = self.hidden[idx]
       x = self.network_out(x)
 
+      if dims == 1:
+        x = x.view(-1)
+
+    #print("LSTM_V is returning size {} from input {}".format(x.size(), state.size()))
     return x

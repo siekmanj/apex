@@ -242,15 +242,14 @@ class PPO:
       with torch.no_grad():
         states = self.actor.normalize_state(states, update=False)
         old_pdf = self.old_actor.pdf(states)
-        old_log_probs = old_pdf.log_prob(actions).sum(-1, keepdim=True)
+        old_log_probs = old_pdf.log_prob(actions).sum(-1, keepdim=True) * mask
 
-      #print("STATES {} VS MASK SIZE: {}".format(states.size(), mask.size()))
       values = self.critic(states) * mask
       pdf = self.actor.pdf(states)
       
-      log_probs = pdf.log_prob(actions).sum(-1, keepdim=True)
-      
-      ratio = (log_probs - old_log_probs).exp()
+      log_probs = pdf.log_prob(actions).sum(-1, keepdim=True) * mask
+
+      ratio = ((log_probs - old_log_probs) * mask).exp()
 
       #print("GOT RATIO SIZE {}, ADVATNAGES {}".format(ratio.size(), advantages.size()))
       #print(ratio)
@@ -258,6 +257,24 @@ class PPO:
       cpi_loss = ratio * advantages
       clip_loss = ratio.clamp(0.8, 1.2) * advantages
       actor_loss = -(torch.min(cpi_loss, clip_loss) * mask).mean()
+
+      if not torch.isfinite(actor_loss) or actor_loss.item() > 1e3:
+        print("LARGE OR NONFINITE ACTOR LOSS: {}".format(actor_loss.item()))
+        print("RATIO:")
+        print(ratio)
+        print("ADVANTAGES:")
+        print(advantages)
+        print("OLD LOG PROBS:")
+        print(old_log_probs)
+        print("NEW LOG PROBS:")
+        print(log_probs)
+
+        print("CPI LOSS:")
+        print(cpi_loss)
+        
+        print("CLIP LOSS:")
+        print(clip_loss)
+        exit(1)
 
       critic_loss = 0.5 * ((returns - values) * mask).pow(2).mean()
 

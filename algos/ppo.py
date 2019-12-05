@@ -254,10 +254,10 @@ class PPO:
         ratio = ((log_probs - old_log_probs) * mask).exp() * mask
         cpi_loss = ratio * advantages
         clip_loss = ratio.clamp(0.8, 1.2) * advantages
-        actor_loss = -(torch.min(cpi_loss, clip_loss) * mask).mean()
+        actor_loss = -torch.min(cpi_loss, clip_loss).mean()
       else:
         ratio = ((log_probs - old_log_probs) * mask).exp().clamp(0.8, 1.2) * mask
-        actor_loss = -(ratio.clamp(0.8, 1.2) * advantages * mask).mean()
+        actor_loss = -(ratio.clamp(0.8, 1.2) * advantages).mean()
         actor_loss = -(ratio * advantages).mean()
 
 

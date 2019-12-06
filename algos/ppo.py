@@ -253,7 +253,15 @@ class PPO:
       #input()
       cpi_loss = ratio * advantages
       clip_loss = ratio.clamp(0.8, 1.2) * advantages
+
       actor_loss = -(torch.min(cpi_loss, clip_loss) * mask).mean()
+
+      if not torch.isfinite(actor_loss) or actor_loss > 1e3:
+        print("NONFINITE ACKTR LOSS")
+        print("RATIO: ", ratio)
+        print("OLD LOGS: ", old_log_probs)
+        print("LOGS: ", log_probs)
+        print("ADVANTAGES: ", advantages)
 
       critic_loss = 0.5 * ((returns - values) * mask).pow(2).mean()
 

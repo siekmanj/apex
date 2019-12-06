@@ -92,43 +92,30 @@ class Buffer:
       self._finish_buffer()
 
     if recurrent:
-      #print("SAMPLING RECURRENTS!")
       random_indices = SubsetRandomSampler(range(len(self.traj_idx)-1))
       sampler = BatchSampler(random_indices, batch_size, drop_last=True)
 
-      #print("{} batches in sampler out of {} total trajectories.".format(len(sampler), len(self.traj_idx)))
-
       for traj_indices in sampler:
-        #print("SAMPLING {} trajectories:".format(len(traj_indices)))
         states     = [self.states[self.traj_idx[i]:self.traj_idx[i+1]]          for i in traj_indices]
         actions    = [self.actions[self.traj_idx[i]:self.traj_idx[i+1]]         for i in traj_indices]
         returns    = [self.returns[self.traj_idx[i]:self.traj_idx[i+1]]         for i in traj_indices]
         advantages = [self.advantages[self.traj_idx[i]:self.traj_idx[i+1]]      for i in traj_indices]
         traj_mask  = [torch.ones_like(r) for r in returns]
 
-        total_steps = sum([self.traj_idx[i+1] - self.traj_idx[i] for i in traj_indices[:-1]])
-        #print("TOTAL STEPS IN THIS BATCH: {}".format(total_steps))
+        
+        lens = [self.traj_idx[i+1] - self.traj_idx[i] for i in traj_indices[:-1]]
 
-        """
-        for r in returns:
-          print("GOT R {}, LOOKS LIKE {}, SIZE {}, SIZE {}".format(r[:,0], torch.ones_like(r[:,0]), r[:,0].size(), torch.ones_like(r[:,0]).size()))
-          input()
+        if True: # try clipping trajectories to be same length
+          clip_len = min(lens)
+        else: # try clipping by mean?
+          clip_len = int(np.mean(lens))
 
-        for r in returns:
-          print("GOT RETURN TRAJ")
-          print(self.returns[self.traj_idx[0]:self.traj_idx[1]])
-          print("Vs:")
-          print(self.returns[self.traj_idx[0]:self.traj_idx[0+1]+1])
-          input()
+        states     = pad_sequence(states, batch_first=False)[:clip_len]
+        actions    = pad_sequence(actions, batch_first=False)[:clip_len]
+        returns    = pad_sequence(returns, batch_first=False)[:clip_len]
+        advantages = pad_sequence(advantages, batch_first=False)[:clip_len]
+        traj_mask  = pad_sequence(traj_mask, batch_first=False)[:clip_len]
 
-        """
-        states     = pad_sequence(states, batch_first=False)
-        actions    = pad_sequence(actions, batch_first=False)
-        returns    = pad_sequence(returns, batch_first=False)
-        advantages = pad_sequence(advantages, batch_first=False)
-        traj_mask  = pad_sequence(traj_mask, batch_first=False)
-
-        #print("YIELDING STATE {}, ACTIONS {}, RETURNS {}, ADV {}, TRAJ MASK {}".format(states.size(), actions.size(), returns.size(), advantages.size(), traj_mask.size()))
         yield states, actions, returns, advantages, traj_mask
 
     else:
@@ -141,12 +128,10 @@ class Buffer:
         returns    = self.returns[idxs]
         advantages = self.advantages[idxs]
 
-        #print("TOTAL STEPS IN THIS BATCH: {}".format(len(idxs)))
         yield states, actions, returns, advantages, 1
 
 @ray.remote
 class PPO_Worker:
-  #def __init__(self, env_fn, gamma):
   def __init__(self, actor, critic, env_fn, gamma):
     torch.set_num_threads(1)
     self.env = env_fn()
@@ -236,7 +221,6 @@ class PPO:
         else:
           ray.init(num_cpus=args.workers)
 
-      #self.workers = [PPO_Worker.remote(env_fn, discount) for _ in range(workers)]
       self.workers = [PPO_Worker.remote(actor, critic, env_fn, args.discount) for _ in range(args.workers)]
 
     def update_policy(self, states, actions, returns, advantages, mask):

@@ -128,9 +128,6 @@ class FF_V(Critic):
 
   def forward(self, state):
 
-    if hasattr(self, 'obs_mean') and hasattr(self, 'obs_std'):
-      state = (state - self.obs_mean) / self.obs_std
-
     x = state
     for idx, layer in enumerate(self.critic_layers):
       x = F.relu(layer(x))
@@ -258,5 +255,4 @@ class LSTM_V(Critic):
       if dims == 1:
         x = x.view(-1)
 
-    #print("LSTM_V is returning size {} from input {}".format(x.size(), state.size()))
     return x

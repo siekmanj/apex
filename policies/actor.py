@@ -187,7 +187,10 @@ class LSTM_Actor(Actor):
         h, c = self.hidden[idx], self.cells[idx]
         self.hidden[idx], self.cells[idx] = layer(x, (h, c))
         x = self.hidden[idx]
-      x = self.nonlinearity(self.network_out(x))[0]
+      x = self.network_out(x)
+
+      if dims == 1:
+        x = x.view(-1)
       self.action = x
 
     return x
@@ -196,7 +199,7 @@ class LSTM_Actor(Actor):
     return self.action
 
 class LSTM_Stochastic_Actor(Actor):
-  def __init__(self, state_dim, action_dim, layers=(128, 128), env_name=None, nonlinearity=F.relu, normc_init=False, max_action=1, fixed_std=None):
+  def __init__(self, state_dim, action_dim, layers=(128, 64), env_name=None, nonlinearity=F.tanh, normc_init=False, max_action=1, fixed_std=None):
     super(LSTM_Stochastic_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -237,6 +240,7 @@ class LSTM_Stochastic_Actor(Actor):
           c, h = self.cells[idx], self.hidden[idx]
           self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
           x_t = self.hidden[idx]
+        #x_t = self.nonlinearity(self.network_out(x_t))
         x_t = self.network_out(x_t)
         action.append(x_t)
 
@@ -250,7 +254,11 @@ class LSTM_Stochastic_Actor(Actor):
         h, c = self.hidden[idx], self.cells[idx]
         self.hidden[idx], self.cells[idx] = layer(x, (h, c))
         x = self.hidden[idx]
-      x = self.nonlinearity(self.network_out(x))[0]
+      #x = self.nonlinearity(self.network_out(x))[0]
+      x = self.network_out(x)
+
+      if dims == 1:
+        x = x.view(-1)
 
     mu = x
     if self.learn_std:

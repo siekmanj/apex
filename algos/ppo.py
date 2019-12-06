@@ -146,12 +146,14 @@ class Buffer:
 
 @ray.remote
 class PPO_Worker:
-  def __init__(self, env_fn, gamma):
+  #def __init__(self, env_fn, gamma):
+  def __init__(self, actor, critic, env_fn, gamma):
     torch.set_num_threads(1)
     self.env = env_fn()
     self.gamma = gamma
+    self.actor = deepcopy(actor)
+    self.critic = deepcopy(critic)
 
-  """
   def update_policy(self, new_actor_params, new_critic_params, input_norm=None):
     for p, new_p in zip(self.actor.parameters(), new_actor_params):
       p.data.copy_(new_p)
@@ -162,13 +164,15 @@ class PPO_Worker:
     if input_norm is not None:
       self.actor.welford_state_mean, self.actor.welford_state_mean_diff, self.actor.welford_state_n = input_norm
 
-  """
-
-  def collect_experience(self, actor, critic, max_traj_len, min_steps):
+  #def collect_experience(self, actor, critic, max_traj_len, min_steps):
+  def collect_experience(self, max_traj_len, min_steps):
     start = time()
 
     num_steps = 0
     memory = Buffer(self.gamma)
+    actor  = self.actor
+    critic = self.critic
+
     while num_steps < min_steps:
       state = torch.Tensor(self.env.reset())
 
@@ -206,7 +210,8 @@ class PPO_Worker:
     return memory
 
 class PPO:
-    def __init__(self, actor, critic, env_fn, discount=0.99, entropy_coeff=0.0, a_lr=1e-4, c_lr=1e-4, eps=1e-5, grad_clip=0.05, workers=4, redis=None):
+    #def __init__(self, actor, critic, env_fn, discount=0.99, entropy_coeff=0.0, a_lr=1e-4, c_lr=1e-4, eps=1e-5, grad_clip=0.05, workers=4, redis=None):
+    def __init__(self, actor, critic, env_fn, args):
 
       self.actor = actor
       self.old_actor = deepcopy(actor)
@@ -218,21 +223,21 @@ class PPO:
       else:
         self.recurrent = False
 
-      self.actor_optim = optim.Adam(self.actor.parameters(), lr=a_lr, eps=eps)
-      self.critic_optim = optim.Adam(self.critic.parameters(), lr=c_lr, eps=eps)
+      self.actor_optim = optim.Adam(self.actor.parameters(), lr=args.a_lr, eps=args.eps)
+      self.critic_optim = optim.Adam(self.critic.parameters(), lr=args.c_lr, eps=args.eps)
       self.env_fn = env_fn
-      self.discount = discount
-      self.entropy_coeff = entropy_coeff
-      self.grad_clip = grad_clip
+      self.discount = args.discount
+      self.entropy_coeff = args.entropy_coeff
+      self.grad_clip = args.grad_clip
 
       if not ray.is_initialized():
-        if redis is not None:
-          ray.init(redis_address=redis)
+        if args.redis is not None:
+          ray.init(redis_address=args.redis)
         else:
-          ray.init(num_cpus=workers)
+          ray.init(num_cpus=args.workers)
 
       #self.workers = [PPO_Worker.remote(env_fn, discount) for _ in range(workers)]
-      self.workers = [PPO_Worker.remote(env_fn, discount) for _ in range(workers)]
+      self.workers = [PPO_Worker.remote(actor, critic, env_fn, args.discount) for _ in range(args.workers)]
 
     def update_policy(self, states, actions, returns, advantages, mask):
       with torch.no_grad():
@@ -240,30 +245,37 @@ class PPO:
         old_pdf = self.old_actor.pdf(states)
         old_log_probs = old_pdf.log_prob(actions).sum(-1, keepdim=True)
 
-      #print("STATES {} VS MASK SIZE: {}".format(states.size(), mask.size()))
-      values = self.critic(states) * mask
       pdf = self.actor.pdf(states)
       
       log_probs = pdf.log_prob(actions).sum(-1, keepdim=True)
-      
-      ratio = (log_probs - old_log_probs).exp()
 
-      #print("GOT RATIO SIZE {}, ADVATNAGES {}".format(ratio.size(), advantages.size()))
-      #print(ratio)
-      #input()
-      cpi_loss = ratio * advantages
-      clip_loss = ratio.clamp(0.8, 1.2) * advantages
+      ratio = ((log_probs - old_log_probs)).exp()
+      cpi_loss = ratio * advantages * mask
+      clip_loss = ratio.clamp(0.8, 1.2) * advantages * mask
+      actor_loss = -torch.min(cpi_loss, clip_loss).mean()
 
-      actor_loss = -(torch.min(cpi_loss, clip_loss) * mask).mean()
+      if not torch.isfinite(actor_loss) or actor_loss.item() > 1e3:
+        print("LARGE OR NONFINITE ACTOR LOSS: {}".format(actor_loss.item()))
+        print("RATIO:")
+        #print(ratio)
+        print(ratio.mean())
+        print("OLD LOG PROBABILITIES")
+        #print(old_log_probs)
+        print(old_log_probs.mean())
+        print("END OLD LOG PROBS")
 
-      if not torch.isfinite(actor_loss) or actor_loss > 1e3:
-        print("NONFINITE ACKTR LOSS")
-        print("RATIO: ", ratio)
-        print("OLD LOGS: ", old_log_probs)
-        print("LOGS: ", log_probs)
-        print("ADVANTAGES: ", advantages)
+        print("NEW LOG PROBS")
+        #print(log_probs)
+        print(log_probs.mean())
+        print("END NEW LOG PROBS")
 
-      critic_loss = 0.5 * ((returns - values) * mask).pow(2).mean()
+        print(states.mean())
+        print(actions.mean())
+        print(returns.mean())
+        print(advantages.mean())
+        exit(1)
+
+      critic_loss = 0.5 * ((returns - self.critic(states)) * mask).pow(2).mean()
 
       entropy_penalty = -(self.entropy_coeff * pdf.entropy() * mask).mean()
 
@@ -273,8 +285,8 @@ class PPO:
       (actor_loss + entropy_penalty).backward()
       critic_loss.backward()
 
-      torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.grad_clip)
-      torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.grad_clip)
+      torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=self.grad_clip)
+      torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=self.grad_clip)
       self.actor_optim.step()
       self.critic_optim.step()
 
@@ -304,22 +316,20 @@ class PPO:
       self.old_actor.load_state_dict(self.actor.state_dict())
 
       start = time()
-      #actor_param_id  = ray.put(list(self.actor.parameters()))
-      #critic_param_id = ray.put(list(self.critic.parameters()))
-      #norm_id = ray.put([self.actor.welford_state_mean, self.actor.welford_state_mean_diff, self.actor.welford_state_n])
-      #if verbose:
-      #  print("\tDEBUG: {:5.4f}s to place policy params in shared memory.".format(time() - start))
+      actor_param_id  = ray.put(list(self.actor.parameters()))
+      critic_param_id = ray.put(list(self.critic.parameters()))
+      norm_id = ray.put([self.actor.welford_state_mean, self.actor.welford_state_mean_diff, self.actor.welford_state_n])
 
       steps = num_steps // len(self.workers)
 
-      #start = time()
-      #for w in self.workers:
-      #  w.update_policy.remote(actor_param_id, critic_param_id, input_norm=norm_id)
-      #if verbose:
-      #  print("\tDEBUG: {:5.4f}s to copy policy params to workers.".format(time() - start))
+      for w in self.workers:
+        w.update_policy.remote(actor_param_id, critic_param_id, input_norm=norm_id)
+      if verbose:
+        print("\t{:5.4f}s to copy policy params to workers.".format(time() - start))
 
       start = time()
-      buffers = ray.get([w.collect_experience.remote(self.actor, self.critic, max_traj_len, steps) for w in self.workers])
+      #buffers = ray.get([w.collect_experience.remote(self.actor, self.critic, max_traj_len, steps) for w in self.workers])
+      buffers = ray.get([w.collect_experience.remote(max_traj_len, steps) for w in self.workers])
       memory = self.merge_buffers(buffers)
 
       total_steps = len(memory)
@@ -418,7 +428,7 @@ def run_experiment(args):
     policy.train(0)
     critic.train(0)
 
-    algo = PPO(policy, critic, env_fn, workers=args.workers)
+    algo = PPO(policy, critic, env_fn, args)
 
     # create a tensorboard logging object
     if not args.nolog:
@@ -433,8 +443,8 @@ def run_experiment(args):
     print("Proximal Policy Optimization:")
     print("\tseed:               {}".format(args.seed))
     print("\tenv:                {}".format(args.env_name))
-    print("\ttimesteps:          {}".format(args.timesteps))
-    print("\tprenormalize steps: {}".format(args.prenormalize_steps))
+    print("\ttimesteps:          {:n}".format(int(args.timesteps)))
+    print("\tprenormalize steps: {}".format(int(args.prenormalize_steps)))
     print("\ttraj_len:           {}".format(args.traj_len))
     print("\tdiscount:           {}".format(args.discount))
     print("\tactor_lr:           {}".format(args.a_lr))
@@ -451,7 +461,7 @@ def run_experiment(args):
     timesteps = 0
     best_reward = None
     while timesteps < args.timesteps:
-      kl, a_loss, c_loss, steps = algo.do_iteration(args.num_steps, args.traj_len, args.epochs, batch_size=args.batch_size, kl_thresh=0.1)
+      kl, a_loss, c_loss, steps = algo.do_iteration(args.num_steps, args.traj_len, args.epochs, batch_size=args.batch_size, kl_thresh=args.kl)
       eval_reward = eval_policy(algo.actor, env, False, min_timesteps=args.traj_len*5, max_traj_len=args.traj_len, verbose=False)
 
       timesteps += steps

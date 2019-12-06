@@ -152,7 +152,7 @@ if __name__ == "__main__":
     sys.argv.remove(sys.argv[1])
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--hidden_size",          default=32, type=int)                 # neurons in hidden layer
-    parser.add_argument("--timesteps",    "-t",   default=1e8, type=int)                # timesteps to run experiment ofr
+    parser.add_argument("--timesteps",    "-t",   default=1e8, type=float)                # timesteps to run experiment ofr
     parser.add_argument("--load_model",   "-l",   default=None, type=str)               # load a model from a saved file.
     parser.add_argument('--std',          "-sd",  default=0.0075, type=float)           # the standard deviation of the parameter noise vectors
     parser.add_argument("--deltas",       "-d",   default=64, type=int)                 # number of parameter noise vectors to use
@@ -183,7 +183,7 @@ if __name__ == "__main__":
       Utility for running Recurrent/Deep Deterministic Policy Gradients.
     """
     from algos.dpg import run_experiment
-    parser.add_argument("--timesteps",       "-t",  default=1e6,   type=int)      # number of timesteps in replay buffer
+    parser.add_argument("--timesteps",       "-t",  default=1e6,   type=float)      # number of timesteps in replay buffer
     parser.add_argument("--start_timesteps",        default=1e4,   type=int)      # number of timesteps to generate random actions for
     parser.add_argument("--load_actor",             default=None,  type=str)      # load an actor from a .pt file
     parser.add_argument("--load_critic",            default=None,  type=str)      # load a critic from a .pt file
@@ -229,7 +229,7 @@ if __name__ == "__main__":
     """
     from algos.td3 import run_experiment
     parser.add_argument("--timesteps",       "-t",  default=1e6,   type=float)    # number of timesteps in replay buffer
-    parser.add_argument("--start_timesteps",        default=1e4,   type=int)      # number of timesteps to generate random actions for
+    parser.add_argument("--start_timesteps",        default=1e4,   type=float)      # number of timesteps to generate random actions for
     parser.add_argument("--load_actor",             default=None,  type=str)      # load an actor from a .pt file
     parser.add_argument("--load_critic1",           default=None,  type=str)      # load a critic from a .pt file
     parser.add_argument("--load_critic2",           default=None,  type=str)      # load a critic from a .pt file
@@ -272,7 +272,7 @@ if __name__ == "__main__":
     """
     from algos.ppo import run_experiment
     parser.add_argument("--seed",                   default=0,             type=int)      # number of timesteps to run experiment for
-    parser.add_argument("--timesteps",       "-t",  default=1e6,           type=int)      # number of timesteps to run experiment for
+    parser.add_argument("--timesteps",       "-t",  default=1e6,           type=float)      # number of timesteps to run experiment for
     parser.add_argument("--env_name",               default='Cassie-v0',   type=str)
     parser.add_argument("--traj_len",       "-tl",  default=400,           type=int)      # max trajectory length for environment
     parser.add_argument("--prenormalize_steps",     default=10000,         type=int)      
@@ -284,6 +284,7 @@ if __name__ == "__main__":
     parser.add_argument("--a_lr",           "-alr", default=1e-4,          type=float)    # adam learning rate for actor
     parser.add_argument("--c_lr",           "-clr", default=1e-4,          type=float)    # adam learning rate for critic
     parser.add_argument("--eps",            "-ep",  default=1e-5,          type=float)    # adam eps
+    parser.add_argument("--kl",                     default=0.02,          type=float)    # kl abort threshold
     parser.add_argument("--entropy_coeff",          default=0.0,           type=float)
     parser.add_argument("--grad_clip",              default=0.05,          type=float)
     parser.add_argument("--batch_size",             default=64,            type=int)      # batch size for policy update

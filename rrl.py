@@ -28,7 +28,7 @@ def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=Fal
     """
     #if path in ['Cassie-v0', 'Cassie-v1', 'CassieRandomDynamics-v0']:
     if 'cassie' in path.lower():
-      from cassie import CassieEnv_v0, CassieEnv_v1, CassieEnv_v2, CassieTSEnv, CassieIKEnv
+      from cassie import CassieEnv_v2
       path = path.lower()
 
       if 'random_dynamics' in path or 'dynamics_random' in path or 'randomdynamics' in path or 'dynamicsrandom' in path:

@@ -173,7 +173,7 @@ class LSTM_Actor(Actor):
           c, h = self.cells[idx], self.hidden[idx]
           self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
           x_t = self.hidden[idx]
-        x_t = self.network_out(x_t)
+        x_t = self.nonlinearity(self.network_out(x_t))
         action.append(x_t)
 
       x = torch.stack([a.float() for a in action])
@@ -187,7 +187,7 @@ class LSTM_Actor(Actor):
         h, c = self.hidden[idx], self.cells[idx]
         self.hidden[idx], self.cells[idx] = layer(x, (h, c))
         x = self.hidden[idx]
-      x = self.network_out(x)
+      x = self.nonlinearity(self.network_out(x))
 
       if dims == 1:
         x = x.view(-1)

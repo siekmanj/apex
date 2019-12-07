@@ -1,5 +1,6 @@
 from .cassie_env import CassieEnv_v1
 from .vanilla_env import CassieEnv_v0
+from .cassie import CassieEnv_v2
 from .taskspace_env import CassieTSEnv
 from .aslipik_env import CassieIKEnv
 from .no_delta_env import CassieEnv_nodelta

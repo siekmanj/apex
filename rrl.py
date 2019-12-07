@@ -26,9 +26,38 @@ def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=Fal
 
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
-    if path in ['Cassie-v0', 'Cassie-v1', 'CassieRandomDynamics-v0']:
-      from cassie import CassieEnv_v0, CassieEnv_v1, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
+    #if path in ['Cassie-v0', 'Cassie-v1', 'CassieRandomDynamics-v0']:
+    if 'cassie' in path.lower():
+      from cassie import CassieEnv_v0, CassieEnv_v1, CassieEnv_v2, CassieTSEnv, CassieIKEnv
+      path = path.lower()
 
+      if 'random_dynamics' in path or 'dynamics_random' in path or 'randomdynamics' in path or 'dynamicsrandom' in path:
+        dynamics_randomization = True
+      else:
+        dynamics_randomization = False
+      
+      if 'nodelta' in path or 'no_delta' in path:
+        no_delta = True
+      else:
+        no_delta = False
+      
+      if 'stateest' in path or 'state_est' in path:
+        state_est = True
+      else:
+        state_est = False
+
+      if 'clock_based' in path or 'clockbased' in path:
+        clock_based = True
+      else:
+        clock_based = False
+
+      print("Created cassie env with arguments:")
+      print("\tdynamics randomization: {}".format(dynamics_randomization))
+      print("\tstate estimation:       {}".format(state_est))
+      print("\tno delta:               {}".format(no_delta))
+      print("\tclock based:            {}".format(clock_based))
+      env_fn = partial(CassieEnv_v2, 'walking', clock_based=clock_based, state_est=state_est, no_delta=no_delta, dynamics_randomization=dynamics_randomization)
+      """
       if path == 'Cassie-v0':
         env_fn = partial(CassieEnv_v0, "walking", clock_based=clock_based)
       if path == 'Cassie-v1':
@@ -36,6 +65,7 @@ def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=Fal
       elif path == 'CassieRandomDynamics-v0':
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=clock_based, state_est=state_est)
 
+      """
       return env_fn
 
     spec = gym.envs.registry.spec(path)
@@ -110,6 +140,9 @@ def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
     done = False
     timesteps = 0
     eval_reward = 0
+    if hasattr(policy, 'init_hidden_state'):
+      policy.init_hidden_state()
+
     while not done and timesteps < max_traj_len:
 
       if hasattr(env, 'simrate'):

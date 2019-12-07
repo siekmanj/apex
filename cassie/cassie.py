@@ -1,3 +1,5 @@
+# Consolidated Cassie environment.
+
 from .cassiemujoco import pd_in_t, state_out_t, CassieSim, CassieVis
 
 from .trajectory import CassieTrajectory
@@ -10,45 +12,77 @@ import random
 
 import pickle
 
-class CassieIKTrajectory:
-    def __init__(self, filepath):
-        with open(filepath, "rb") as f:
-            trajectory = pickle.load(f)
+#nbody layout:
+# 0:  worldbody (zero)
+# 1:  pelvis
 
-        self.qpos = np.copy(trajectory["qpos"])
-        self.qvel = np.copy(trajectory["qvel"])
-        #self.foot =
-    
-    def __len__(self):
-        return len(self.qpos)
+# 2:  left hip roll 
+# 3:  left hip yaw
+# 4:  left hip pitch
+# 5:  left achilles rod
+# 6:  left knee
+# 7:  left knee spring
+# 8:  left shin
+# 9:  left tarsus
+# 10:  left heel spring
+# 12:  left foot crank
+# 12: left plantar rod
+# 13: left foot
 
-class CassieEnv_speed_freq_no_delta:
-    def __init__(self, traj, simrate=60, clock_based=False, state_est=False):
+# 14: right hip roll 
+# 15: right hip yaw
+# 16: right hip pitch
+# 17: right achilles rod
+# 18: right knee
+# 19: right knee spring
+# 20: right shin
+# 21: right tarsus
+# 22: right heel spring
+# 23: right foot crank
+# 24: right plantar rod
+# 25: right foot
+
+
+class CassieEnv_v2:
+    def __init__(self, traj='walking', simrate=60, clock_based=False, state_est=False, dynamics_randomization=False, no_delta=False, ik_traj=None):
         self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
 
         self.clock_based = clock_based
         self.state_est = state_est
+        self.no_delta = no_delta
+        self.dynamics_randomization = dynamics_randomization
+
+        mjstate_size   = 40
+        state_est_size = 46
+
+        clock_size    = 2
+        ref_traj_size = 40
+
+        speed_size     = 1
 
         if clock_based:
-            self.observation_space = np.zeros(42 + 2)
             if self.state_est:
-                self.observation_space = np.zeros(48 + 2)       # Size for use with state est
+                self.observation_space = np.zeros(state_est_size + clock_size + speed_size)
+            else:
+              self.observation_space = np.zeros(mjstate_size + clock_size + speed_size)
         else:
-            self.observation_space = np.zeros(80)
             if self.state_est:
-                self.observation_space = np.zeros(86)       # Size for use with state est
-        self.action_space      = np.zeros(10)
+              self.observation_space = np.zeros(state_est_size + ref_traj_size)
+            else:
+              self.observation_space = np.zeros(mjstate_size + ref_traj_size)
+
+        self.action_space = np.zeros(10)
 
         dirname = os.path.dirname(__file__)
+
         if traj == "walking":
             traj_path = os.path.join(dirname, "trajectory", "stepdata.bin")
 
         elif traj == "stepping":
-            # traj_path = os.path.join(dirname, "trajectory", "spline_stepping_traj.pkl")
             traj_path = os.path.join(dirname, "trajectory", "more-poses-trial.bin")
 
-        # self.trajectory = CassieIKTrajectory(traj_path)
+        # TODO: add IK trajectory compatibility
         self.trajectory = CassieTrajectory(traj_path)
 
         self.P = np.array([100,  100,  88,  96,  50]) 
@@ -81,9 +115,24 @@ class CassieEnv_speed_freq_no_delta:
         # maybe make ref traj only send relevant idxs?
         ref_pos, ref_vel = self.get_ref_state(self.phase)
         self.phase_add = 1
-    
+
+        # Record default dynamics parameters
+        self.default_damping = self.sim.get_dof_damping()
+        self.default_mass = self.sim.get_body_mass()
+        self.default_ipos = self.sim.get_body_ipos()
+        self.default_fric = self.sim.get_ground_friction()
 
     def step_simulation(self, action):
+
+        # maybe make ref traj only send relevant idxs?
+        ref_pos, ref_vel = self.get_ref_state(self.phase + self.phase_add)
+        
+        if not self.no_delta:
+          target = action + ref_pos[self.pos_idx]
+        else:
+          offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
+          target = action + offset
+
         
         self.u = pd_in_t()
         for i in range(5):
@@ -98,8 +147,8 @@ class CassieEnv_speed_freq_no_delta:
             self.u.leftLeg.motorPd.torque[i]  = 0 # Feedforward torque
             self.u.rightLeg.motorPd.torque[i] = 0 
 
-            self.u.leftLeg.motorPd.pTarget[i]  = action[i]
-            self.u.rightLeg.motorPd.pTarget[i] = action[i + 5]
+            self.u.leftLeg.motorPd.pTarget[i]  = target[i]
+            self.u.rightLeg.motorPd.pTarget[i] = target[i + 5]
 
             self.u.leftLeg.motorPd.dTarget[i]  = 0
             self.u.rightLeg.motorPd.dTarget[i] = 0
@@ -108,13 +157,6 @@ class CassieEnv_speed_freq_no_delta:
 
     def step(self, action):
         for _ in range(self.simrate):
-            # h = 0.005
-            # Tf = 1.0 / 300.0
-            # alpha = h / (Tf + h)
-            # real_action = (1-alpha)*self.prev_action + alpha*action
-            # self.prev_action = real_action
-            # self.step_simulation(real_action)
-            
             self.step_simulation(action)
 
         height = self.sim.qpos()[2]
@@ -152,66 +194,79 @@ class CassieEnv_speed_freq_no_delta:
         self.cassie_state = self.sim.step_pd(self.u)
 
         self.speed = (random.randint(0, 10)) / 10
-        # self.phase_add = random.randint(1, 4)
         # maybe make ref traj only send relevant idxs?
         ref_pos, ref_vel = self.get_ref_state(self.phase)
-        self.prev_action = ref_pos[self.pos_idx]
+
+        # Randomize dynamics:
+        if self.dynamics_randomization:
+            damp = self.default_damping
+            weak_factor = 1
+            strong_factor = 1
+            pelvis_damp_range = [[damp[0], damp[0]], 
+                                 [damp[1], damp[1]], 
+                                 [damp[2], damp[2]], 
+                                 [damp[3], damp[3]], 
+                                 [damp[4], damp[4]], 
+                                 [damp[5], damp[5]]]                 # 0->5
+
+            hip_damp_range = [[damp[6]/weak_factor, damp[6]*weak_factor],
+                              [damp[7]/weak_factor, damp[7]*weak_factor],
+                              [damp[8]/weak_factor, damp[8]*weak_factor]]  # 6->8 and 19->21
+
+            achilles_damp_range = [[damp[9]/weak_factor,  damp[9]*weak_factor],
+                                   [damp[10]/weak_factor, damp[10]*weak_factor], 
+                                   [damp[11]/weak_factor, damp[11]*weak_factor]] # 9->11 and 22->24
+
+            knee_damp_range     = [[damp[12]/weak_factor, damp[12]*weak_factor]]   # 12 and 25
+            shin_damp_range     = [[damp[13]/weak_factor, damp[13]*weak_factor]]   # 13 and 26
+            tarsus_damp_range   = [[damp[14], damp[14]*strong_factor]]             # 14 and 27
+            heel_damp_range     = [[damp[15], damp[15]]]                           # 15 and 28
+            fcrank_damp_range   = [[damp[16]/weak_factor, damp[16]*weak_factor]]   # 16 and 29
+            prod_damp_range     = [[damp[17], damp[17]]]                           # 17 and 30
+            foot_damp_range     = [[damp[18]/weak_factor, damp[18]*weak_factor]]   # 18 and 31
+
+            side_damp = hip_damp_range + achilles_damp_range + knee_damp_range + shin_damp_range + tarsus_damp_range + heel_damp_range + fcrank_damp_range + prod_damp_range + foot_damp_range
+            damp_range = pelvis_damp_range + side_damp + side_damp
+            damp_noise = [np.random.uniform(a, b) for a, b in damp_range]
+
+            hi = 1.2
+            lo = 0.8
+            m = self.default_mass
+            pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
+            hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16
+                                      [lo*m[3],  hi*m[3]], 
+                                      [lo*m[4],  hi*m[4]]] 
+
+            achilles_mass_range    = [[lo*m[5],  hi*m[5]]]  # 5 and 17
+            knee_mass_range        = [[lo*m[6],  hi*m[6]]]  # 6 and 18
+            knee_spring_mass_range = [[lo*m[7],  hi*m[7]]]  # 7 and 19
+            shin_mass_range        = [[lo*m[8],  hi*m[8]]]  # 8 and 20
+            tarsus_mass_range      = [[lo*m[9],  hi*m[9]]]  # 9 and 21
+            heel_spring_mass_range = [[lo*m[10], hi*m[10]]] # 10 and 22
+            fcrank_mass_range      = [[lo*m[11], hi*m[11]]] # 11 and 23
+            prod_mass_range        = [[lo*m[12], hi*m[12]]] # 12 and 24
+            foot_mass_range        = [[lo*m[13], hi*m[13]]] # 13 and 25
+
+            side_mass = hip_mass_range + achilles_mass_range \
+                        + knee_mass_range + knee_spring_mass_range \
+                        + shin_mass_range + tarsus_mass_range \
+                        + heel_spring_mass_range + fcrank_mass_range \
+                        + prod_mass_range + foot_mass_range
+
+            mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
+            mass_noise = [np.random.uniform(a, b) for a, b in mass_range]
+
+            delta = 0.001
+            com_noise = [0, 0, 0] + [self.default_ipos[i] + np.random.uniform(-delta, delta) for i in range(3, len(self.default_ipos))]
+
+            fric_noise = [np.random.uniform(0.3, 1.3)] + list(self.default_fric[1:])
+
+            self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
+            self.sim.set_body_mass(np.clip(mass_noise, 0, None))
+            self.sim.set_body_ipos(np.clip(com_noise, 0, None))
+            self.sim.set_ground_friction(np.clip(fric_noise, 0, None))
 
         return self.get_full_state()
-
-    # used for plotting against the reference trajectory
-    def reset_for_test(self):
-        self.phase = 0
-        self.phase_add = 1
-        self.time = 0
-        self.counter = 0
-        self.speed = 1
-
-        qpos, qvel = self.get_ref_state(self.phase)
-
-        self.sim.set_qpos(qpos)
-        self.sim.set_qvel(qvel)
-
-        # maybe make ref traj only send relevant idxs?
-        ref_pos, ref_vel = self.get_ref_state(self.phase)
-        self.prev_action = ref_pos[self.pos_idx]
-
-        # Need to reset u? Or better way to reset cassie_state than taking step
-        self.cassie_state = self.sim.step_pd(self.u)
-
-        return self.get_full_state()
-    
-    def set_joint_pos(self, jpos, fbpos=None, iters=5000):
-        """
-        Kind of hackish. 
-        This takes a floating base position and some joint positions
-        and abuses the MuJoCo solver to get the constrained forward
-        kinematics. 
-
-        There might be a better way to do this, e.g. using mj_kinematics
-        """
-
-        # actuated joint indices
-        joint_idx = [7, 8, 9, 14, 20,
-                     21, 22, 23, 28, 34]
-
-        # floating base indices
-        fb_idx = [0, 1, 2, 3, 4, 5, 6]
-
-        for _ in range(iters):
-            qpos = np.copy(self.sim.qpos())
-            qvel = np.copy(self.sim.qvel())
-
-            qpos[joint_idx] = jpos
-
-            if fbpos is not None:
-                qpos[fb_idx] = fbpos
-
-            self.sim.set_qpos(qpos)
-            self.sim.set_qvel(0 * qvel)
-
-            self.sim.step_pd(pd_in_t())
-
 
     # NOTE: this reward is slightly different from the one in Xie et al
     # see notes for details
@@ -265,24 +320,6 @@ class CassieEnv_speed_freq_no_delta:
                  0.1 * np.exp(-orientation_error) + \
                  0.1 * np.exp(-spring_error)
 
-        # orientation error does not look informative
-        # maybe because it's comparing euclidean distance on quaternions
-        # print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\ncom:\t{2:.2f}, % = {3:.2f}\norient:\t{4:.2f}, % = {5:.2f}\nspring:\t{6:.2f}, % = {7:.2f}\n\n".format(
-        #             0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
-        #             0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
-        #             0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
-        #             0.1 * np.exp(-spring_error),      0.1 * np.exp(-spring_error) / reward * 100,
-        #             reward
-        #         )
-        #     )  
-
-        # reward = np.sign(qvel[0])*qvel[0]**2
-        # desired_speed = 3.0
-        # speed_diff = np.abs(qvel[0] - desired_speed)
-        # if speed_diff > 1:
-        #     speed_diff = speed_diff**2
-        # reward = 20 - speed_diff
-
         return reward
 
     # get the corresponding state from the reference trajectory for the current phase
@@ -304,7 +341,7 @@ class CassieEnv_speed_freq_no_delta:
 
         ###### Setting variable speed  #########
         pos[0] *= self.speed
-        pos[0] += (self.trajectory.qpos[-1, 0]- self.trajectory.qpos[0, 0])* self.counter * self.speed
+        pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter * self.speed
         ######                          ########
 
         # setting lateral distance target to 0?
@@ -380,14 +417,10 @@ class CassieEnv_speed_freq_no_delta:
         vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
 
         if self.clock_based:
-            #qpos[self.pos_idx] -= ref_pos[self.pos_idx]
-            #qvel[self.vel_idx] -= ref_vel[self.vel_idx]
-
             clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
                      np.cos(2 * np.pi *  self.phase / self.phaselen)]
             
-            ext_state = np.concatenate((clock, [self.speed, self.phase_add]))
-
+            ext_state = np.concatenate((clock, [self.speed]))
 
         else:
             ext_state = np.concatenate([ref_pos[pos_index], ref_vel[vel_index]])
@@ -409,12 +442,9 @@ class CassieEnv_speed_freq_no_delta:
         ])
 
         if self.state_est:
-            return np.concatenate([robot_state,  
-                               ext_state])
+            return np.concatenate([robot_state, ext_state])
         else:
-            return np.concatenate([qpos[pos_index], 
-                               qvel[vel_index], 
-                               ext_state])
+            return np.concatenate([qpos[pos_index], qvel[vel_index], ext_state])
 
     def render(self):
         if self.vis is None:

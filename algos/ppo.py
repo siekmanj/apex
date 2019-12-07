@@ -202,8 +202,7 @@ class PPO:
       self.old_actor = deepcopy(actor)
       self.critic = critic
 
-      #if actor.is_recurrent or critic.is_recurrent:
-      if True:
+      if actor.is_recurrent or critic.is_recurrent:
         self.recurrent = True
       else:
         self.recurrent = False
@@ -312,7 +311,6 @@ class PPO:
         print("\t{:5.4f}s to copy policy params to workers.".format(time() - start))
 
       start = time()
-      #buffers = ray.get([w.collect_experience.remote(self.actor, self.critic, max_traj_len, steps) for w in self.workers])
       buffers = ray.get([w.collect_experience.remote(max_traj_len, steps) for w in self.workers])
       memory = self.merge_buffers(buffers)
 

@@ -110,11 +110,11 @@ class Buffer:
         else: # try clipping by mean?
           clip_len = int(np.mean(lens))
 
-        states     = pad_sequence(states, batch_first=False)[:clip_len]
-        actions    = pad_sequence(actions, batch_first=False)[:clip_len]
-        returns    = pad_sequence(returns, batch_first=False)[:clip_len]
-        advantages = pad_sequence(advantages, batch_first=False)[:clip_len]
-        traj_mask  = pad_sequence(traj_mask, batch_first=False)[:clip_len]
+        states     = pad_sequence(states, batch_first=False)#[:clip_len]
+        actions    = pad_sequence(actions, batch_first=False)#[:clip_len]
+        returns    = pad_sequence(returns, batch_first=False)#[:clip_len]
+        advantages = pad_sequence(advantages, batch_first=False)#[:clip_len]
+        traj_mask  = pad_sequence(traj_mask, batch_first=False)#[:clip_len]
 
         yield states, actions, returns, advantages, traj_mask
 

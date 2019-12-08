@@ -3,6 +3,8 @@ import torch
 import hashlib, os
 from collections import OrderedDict
 
+from util.env import env_factory, eval_policy
+
 class color:
  BOLD   = '\033[1m\033[48m'
  END    = '\033[0m'
@@ -13,162 +15,9 @@ class color:
 def print_logo(subtitle="", option=2):
   pass
 
-def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=False, **kwargs):
-    from functools import partial
-
-    """
-    Returns an *uninstantiated* environment constructor.
-
-    Since environments containing cpointers (e.g. Mujoco envs) can't be serialized, 
-    this allows us to pass their constructors to Ray remote functions instead 
-    (since the gym registry isn't shared across ray subprocesses we can't simply 
-    pass gym.make() either)
-
-    Note: env.unwrapped.spec is never set, if that matters for some reason.
-    """
-    #if path in ['Cassie-v0', 'Cassie-v1', 'CassieRandomDynamics-v0']:
-    if 'cassie' in path.lower():
-      from cassie import CassieEnv_v2
-      path = path.lower()
-
-      if 'random_dynamics' in path or 'dynamics_random' in path or 'randomdynamics' in path or 'dynamicsrandom' in path:
-        dynamics_randomization = True
-      else:
-        dynamics_randomization = False
-      
-      if 'nodelta' in path or 'no_delta' in path:
-        no_delta = True
-      else:
-        no_delta = False
-      
-      if 'stateest' in path or 'state_est' in path:
-        state_est = True
-      else:
-        state_est = False
-
-      if 'clock_based' in path or 'clockbased' in path:
-        clock_based = True
-      else:
-        clock_based = False
-
-      print("Created cassie env with arguments:")
-      print("\tdynamics randomization: {}".format(dynamics_randomization))
-      print("\tstate estimation:       {}".format(state_est))
-      print("\tno delta:               {}".format(no_delta))
-      print("\tclock based:            {}".format(clock_based))
-      env_fn = partial(CassieEnv_v2, 'walking', clock_based=clock_based, state_est=state_est, no_delta=no_delta, dynamics_randomization=dynamics_randomization)
-      """
-      if path == 'Cassie-v0':
-        env_fn = partial(CassieEnv_v0, "walking", clock_based=clock_based)
-      if path == 'Cassie-v1':
-        env_fn = partial(CassieEnv_v1, "walking", clock_based=clock_based, state_est=state_est)
-      elif path == 'CassieRandomDynamics-v0':
-        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=clock_based, state_est=state_est)
-
-      """
-      return env_fn
-
-    spec = gym.envs.registry.spec(path)
-    _kwargs = spec._kwargs.copy()
-    _kwargs.update(kwargs)
-
-    try:
-      if callable(spec._entry_point):
-        cls = spec._entry_point(**_kwargs)
-      else:
-        cls = gym.envs.registration.load(spec._entry_point)
-    except AttributeError:
-      if callable(spec.entry_point):
-        cls = spec.entry_point(**_kwargs)
-      else:
-        cls = gym.envs.registration.load(spec.entry_point)
-
-    return partial(cls, **_kwargs)
-
-def create_logger(args):
-  from torch.utils.tensorboard import SummaryWriter
-  """Use hyperparms to set a directory to output diagnostic files."""
-
-  arg_dict = args.__dict__
-  assert "seed" in arg_dict, \
-    "You must provide a 'seed' key in your command line arguments"
-  assert "logdir" in arg_dict, \
-    "You must provide a 'logdir' key in your command line arguments."
-  assert "env_name" in arg_dict, \
-    "You must provide a 'env_name' key in your command line arguments."
-
-  # sort the keys so the same hyperparameters will always have the same hash
-  arg_dict = OrderedDict(sorted(arg_dict.items(), key=lambda t: t[0]))
-
-  # remove seed so it doesn't get hashed, store value for filename
-  # same for logging directory
-  seed = str(arg_dict.pop("seed"))
-  logdir = str(arg_dict.pop('logdir'))
-  env_name = str(arg_dict.pop('env_name'))
-
-  # get a unique hash for the hyperparameter settings, truncated at 10 chars
-  arg_hash   = hashlib.md5(str(arg_dict).encode('ascii')).hexdigest()[0:6] + '-seed' + seed
-  logdir     = os.path.join(logdir, env_name)
-  output_dir = os.path.join(logdir, arg_hash)
-
-  # create a directory with the hyperparm hash as its name, if it doesn't
-  # already exist.
-  os.makedirs(output_dir, exist_ok=True)
-
-  # Create a file with all the hyperparam settings in plaintext
-  info_path = os.path.join(output_dir, "experiment.info")
-  file = open(info_path, 'w')
-  for key, val in arg_dict.items():
-      file.write("%s: %s" % (key, val))
-      file.write('\n')
-
-  logger = SummaryWriter(output_dir, flush_secs=0.1)
-  print("Logging to " + color.BOLD + color.ORANGE + str(output_dir) + color.END)
-
-  logger.dir = output_dir
-  return logger
-
-def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
-
-  if env_name is None:
-    env = env_factory(policy.env_name)()
-  else:
-    env = env_factory(env_name)()
-
-  while True:
-    state = env.reset()
-    done = False
-    timesteps = 0
-    eval_reward = 0
-    if hasattr(policy, 'init_hidden_state'):
-      policy.init_hidden_state()
-
-    while not done and timesteps < max_traj_len:
-
-      if hasattr(env, 'simrate'):
-        start = time.time()
-      
-      state = policy.normalize_state(state, update=False)
-      action = policy.forward(torch.Tensor(state)).detach().numpy()
-      state, reward, done, _ = env.step(action)
-      if visualize:
-        env.render()
-      eval_reward += reward
-      timesteps += 1
-
-      if hasattr(env, 'simrate'):
-        # assume 30hz (hack)
-        end = time.time()
-        delaytime = max(0, 1000 / 30000 - (end-start))
-        time.sleep(delaytime)
-
-    print("Eval reward: ", eval_reward)
-
 if __name__ == "__main__":
   import sys, argparse, time, os
   parser = argparse.ArgumentParser()
-  parser.add_argument("--state_est", default=False, type=bool)
-  parser.add_argument("--clock_based", default=False, type=bool)
   parser.add_argument("--nolog",      action='store_true')
 
   print_logo(subtitle="Maintained by Oregon State University's Dynamic Robotics Lab")
@@ -343,67 +192,5 @@ if __name__ == "__main__":
     policy = torch.load(args.policy)
 
     eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len)
-
-  elif sys.argv[1] == 'pppo':
-    sys.argv.remove(sys.argv[1])
-    from algos.pedro_ppo import run_experiment
-    parser.add_argument("--policy_name", type=str, default="PPO")
-    parser.add_argument("--env_name", "-e",   default="Cassie-v0")
-    parser.add_argument("--logdir", type=str, default="./logs/pedro/")                  # Where to log diagnostics to
-    parser.add_argument("--previous", type=str, default=None)                           # path to directory of previous policies for resuming training
-    parser.add_argument("--seed", default=0, type=int)                                  # Sets Gym, PyTorch and Numpy seeds
-    parser.add_argument("--mirror", default=False, action='store_true')                 # mirror actions or not   
-    parser.add_argument("--redis_address", type=str, default=None)                      # address of redis server (for cluster setups)
-    parser.add_argument("--viz_port", default=8097)                                     # (deprecated) visdom server port
-
-    # PPO algo args
-    parser.add_argument("--input_norm_steps", type=int, default=10000)
-    parser.add_argument("--n_itr", type=int, default=10000, help="Number of iterations of the learning algorithm")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Adam learning rate") # Xie
-    parser.add_argument("--eps", type=float, default=1e-5, help="Adam epsilon (for numerical stability)")
-    parser.add_argument("--lam", type=float, default=0.95, help="Generalized advantage estimate discount")
-    parser.add_argument("--gamma", type=float, default=0.99, help="MDP discount")
-    parser.add_argument("--entropy_coeff", type=float, default=0.0, help="Coefficient for entropy regularization")
-    parser.add_argument("--clip", type=float, default=0.2, help="Clipping parameter for PPO surrogate loss")
-    parser.add_argument("--minibatch_size", type=int, default=64, help="Batch size for PPO updates")
-    parser.add_argument("--epochs", type=int, default=3, help="Number of optimization epochs per PPO update") #Xie
-    parser.add_argument("--num_steps", type=int, default=5096, help="Number of sampled timesteps per gradient estimate")
-    parser.add_argument("--use_gae", type=bool, default=True,help="Whether or not to calculate returns using Generalized Advantage Estimation")
-    parser.add_argument("--num_procs", type=int, default=30, help="Number of threads to train on")
-    parser.add_argument("--max_grad_norm", type=float, default=0.05, help="Value to clip gradients at.")
-    parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode horizon")
-
-    # arg for training on aslipik_env
-    parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
-
-    args = parser.parse_args()
-
-
-    run_experiment(args)
-
-  elif sys.argv[1] == 'og_ppo':
-    sys.argv.remove(sys.argv[1])
-    from algos.og_ppo import run_experiment
-    parser.add_argument("--seed", type=int, default=1,
-                        help="RNG seed")
-    parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
-                        help="Where to log diagnostics to")
-    parser.add_argument("--name", type=str, default="model")
-    parser.add_argument("--env_name", type=str, default="Cassie-v0")
-    parser.add_argument("--gamma", default=0.99)
-    parser.add_argument("--lam", default=0.0)
-    parser.add_argument("--lr", default=3e-4)
-    parser.add_argument("--eps", default=1e-5)
-    parser.add_argument("--entropy_coeff", default=0.0)
-    parser.add_argument("--clip", default=0.2)
-    parser.add_argument("--batch_size", default=64)
-    parser.add_argument("--epochs", default=10)
-    parser.add_argument("--num_steps", default=5096)
-    parser.add_argument("--n_itr", default=10000)
-    parser.add_argument("--use_gae", default=False)
-
-
-    args = parser.parse_args()
-    run_experiment(args)
   else:
     print("Invalid algorithm '{}'".format(sys.argv[1]))

@@ -380,7 +380,8 @@ def eval_policy(policy, env, update_normalizer, min_timesteps=2000, max_traj_len
 def run_experiment(args):
     torch.set_num_threads(1)
 
-    from rrl import env_factory, create_logger
+    from util.env import env_factory
+    from util.log import create_logger
 
     from policies.critic import FF_V, LSTM_V
     from policies.actor import FF_Stochastic_Actor, LSTM_Stochastic_Actor
@@ -389,7 +390,7 @@ def run_experiment(args):
     locale.setlocale(locale.LC_ALL, '')
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, state_est=args.state_est, clock_based=args.clock_based, mirror=False)
+    env_fn = env_factory(args.env_name)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
 

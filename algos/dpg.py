@@ -207,7 +207,9 @@ def collect_experience(policy, env, replay_buffer, initial_state, steps, random_
 def run_experiment(args):
   from time import time
 
-  from rrl import env_factory, create_logger
+  from util.env import env_factory
+  from util.log import create_logger
+
   from policies.critic import FF_Q, LSTM_Q
   from policies.actor import FF_Actor, LSTM_Actor
 

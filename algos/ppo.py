@@ -34,8 +34,8 @@ class Buffer:
     self.returns    = []
     self.advantages = []
 
-    self.ep_returns = [] # for logging
-    self.ep_lens = [] # for logging
+    self.ep_returns = []
+    self.ep_lens = []
 
     self.size = 0
 
@@ -51,23 +51,16 @@ class Buffer:
     self.size += 1
 
   def end_trajectory(self, terminal_value=0):
-    #print("ENDING TRAJECTORY, GOT VAL {}".format(terminal_value))
-    #if terminal_value is None:
-    #    terminal_value = np.zeros(shape=(1,))
-
     self.traj_idx += [self.size]
     rewards = self.rewards[self.traj_idx[-2]:self.traj_idx[-1]]
 
     returns = []
 
-    #R = terminal_value.squeeze(0).copy()
     R = terminal_value
     for reward in reversed(rewards):
-        #print("DISCOUNTED R: {} * {} + {}".format(self.discount, R, reward))
         R = self.discount * R + reward
         returns.insert(0, R)
 
-    #input()
     self.returns += returns
 
     self.ep_returns += [np.sum(rewards)]
@@ -80,8 +73,6 @@ class Buffer:
     self.returns = torch.Tensor(self.returns)
     self.values  = torch.Tensor(self.values)
 
-    #print("BUFFER DONE, {}, {}, {}, {}".format(self.states.size(), self.actions.size(), self.rewards.size(), self.values.size()))
-        
     a = self.returns - self.values
     a = (a - a.mean()) / (a.std() + 1e-4)
     self.advantages = a
@@ -101,20 +92,14 @@ class Buffer:
         returns    = [self.returns[self.traj_idx[i]:self.traj_idx[i+1]]         for i in traj_indices]
         advantages = [self.advantages[self.traj_idx[i]:self.traj_idx[i+1]]      for i in traj_indices]
         traj_mask  = [torch.ones_like(r) for r in returns]
-
         
         lens = [self.traj_idx[i+1] - self.traj_idx[i] for i in traj_indices[:-1]]
 
-        if True: # try clipping trajectories to be same length
-          clip_len = min(lens)
-        else: # try clipping by mean?
-          clip_len = int(np.mean(lens))
-
-        states     = pad_sequence(states, batch_first=False)#[:clip_len]
-        actions    = pad_sequence(actions, batch_first=False)#[:clip_len]
-        returns    = pad_sequence(returns, batch_first=False)#[:clip_len]
-        advantages = pad_sequence(advantages, batch_first=False)#[:clip_len]
-        traj_mask  = pad_sequence(traj_mask, batch_first=False)#[:clip_len]
+        states     = pad_sequence(states, batch_first=False)
+        actions    = pad_sequence(actions, batch_first=False)
+        returns    = pad_sequence(returns, batch_first=False)
+        advantages = pad_sequence(advantages, batch_first=False)
+        traj_mask  = pad_sequence(traj_mask, batch_first=False)
 
         yield states, actions, returns, advantages, traj_mask
 
@@ -149,7 +134,6 @@ class PPO_Worker:
     if input_norm is not None:
       self.actor.welford_state_mean, self.actor.welford_state_mean_diff, self.actor.welford_state_n = input_norm
 
-  #def collect_experience(self, actor, critic, max_traj_len, min_steps):
   def collect_experience(self, max_traj_len, min_steps):
     start = time()
 
@@ -189,13 +173,11 @@ class PPO_Worker:
           num_steps += 1
 
       value = (not done) * critic(torch.Tensor(state)).numpy()
-      #print("GOT FINAL VAL OF {} BECAUSE DONE WAS {}".format(value, done))
       memory.end_trajectory(terminal_value=value)
 
     return memory
 
 class PPO:
-    #def __init__(self, actor, critic, env_fn, discount=0.99, entropy_coeff=0.0, a_lr=1e-4, c_lr=1e-4, eps=1e-5, grad_clip=0.05, workers=4, redis=None):
     def __init__(self, actor, critic, env_fn, args):
 
       self.actor = actor
@@ -236,27 +218,6 @@ class PPO:
       cpi_loss = ratio * advantages * mask
       clip_loss = ratio.clamp(0.8, 1.2) * advantages * mask
       actor_loss = -torch.min(cpi_loss, clip_loss).mean()
-
-      if not torch.isfinite(actor_loss) or actor_loss.item() > 1e3:
-        print("LARGE OR NONFINITE ACTOR LOSS: {}".format(actor_loss.item()))
-        print("RATIO:")
-        #print(ratio)
-        print(ratio.mean())
-        print("OLD LOG PROBABILITIES")
-        #print(old_log_probs)
-        print(old_log_probs.mean())
-        print("END OLD LOG PROBS")
-
-        print("NEW LOG PROBS")
-        #print(log_probs)
-        print(log_probs.mean())
-        print("END NEW LOG PROBS")
-
-        print(states.mean())
-        print(actions.mean())
-        print(returns.mean())
-        print(advantages.mean())
-        exit(1)
 
       critic_loss = 0.5 * ((returns - self.critic(states)) * mask).pow(2).mean()
 

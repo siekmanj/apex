@@ -26,28 +26,44 @@ def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=Fal
 
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
-    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0']:
-      from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
+    #if path in ['Cassie-v0', 'Cassie-v1', 'CassieRandomDynamics-v0']:
+    if 'cassie' in path.lower():
+      from cassie import CassieEnv_v2
+      path = path.lower()
 
-      if path == 'Cassie-v0':
-        env_fn = partial(CassieEnv, "walking", clock_based=clock_based, state_est=state_est)
-      elif path == 'CassieRandomDynamics-v0':
-        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=clock_based, state_est=state_est)
-      elif path == 'CassieRandomDynamics-v0':
-        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=clock_based, state_est=state_est)
+      if 'random_dynamics' in path or 'dynamics_random' in path or 'randomdynamics' in path or 'dynamicsrandom' in path:
+        dynamics_randomization = True
+      else:
+        dynamics_randomization = False
+      
+      if 'nodelta' in path or 'no_delta' in path:
+        no_delta = True
+      else:
+        no_delta = False
+      
+      if 'stateest' in path or 'state_est' in path:
+        state_est = True
+      else:
+        state_est = False
 
+      if 'clock_based' in path or 'clockbased' in path:
+        clock_based = True
+      else:
+        clock_based = False
+
+      print("Created cassie env with arguments:")
+      print("\tdynamics randomization: {}".format(dynamics_randomization))
+      print("\tstate estimation:       {}".format(state_est))
+      print("\tno delta:               {}".format(no_delta))
+      print("\tclock based:            {}".format(clock_based))
+      env_fn = partial(CassieEnv_v2, 'walking', clock_based=clock_based, state_est=state_est, no_delta=no_delta, dynamics_randomization=dynamics_randomization)
       """
-      if mirror:
-          from rl.envs.wrappers import SymmetricEnv
-          if state_est:
-              # with state estimator
-              env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
-          else:
-              # without state estimator
-              env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
-                                              18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
-                                              -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
-                                              mirrored_act = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
+      if path == 'Cassie-v0':
+        env_fn = partial(CassieEnv_v0, "walking", clock_based=clock_based)
+      if path == 'Cassie-v1':
+        env_fn = partial(CassieEnv_v1, "walking", clock_based=clock_based, state_est=state_est)
+      elif path == 'CassieRandomDynamics-v0':
+        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=clock_based, state_est=state_est)
 
       """
       return env_fn
@@ -124,6 +140,9 @@ def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
     done = False
     timesteps = 0
     eval_reward = 0
+    if hasattr(policy, 'init_hidden_state'):
+      policy.init_hidden_state()
+
     while not done and timesteps < max_traj_len:
 
       if hasattr(env, 'simrate'):
@@ -150,6 +169,7 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument("--state_est", default=False, type=bool)
   parser.add_argument("--clock_based", default=False, type=bool)
+  parser.add_argument("--nolog",      action='store_true')
 
   print_logo(subtitle="Maintained by Oregon State University's Dynamic Robotics Lab")
 
@@ -165,7 +185,7 @@ if __name__ == "__main__":
     sys.argv.remove(sys.argv[1])
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--hidden_size",          default=32, type=int)                 # neurons in hidden layer
-    parser.add_argument("--timesteps",    "-t",   default=1e8, type=int)                # timesteps to run experiment ofr
+    parser.add_argument("--timesteps",    "-t",   default=1e8, type=float)                # timesteps to run experiment ofr
     parser.add_argument("--load_model",   "-l",   default=None, type=str)               # load a model from a saved file.
     parser.add_argument('--std',          "-sd",  default=0.0075, type=float)           # the standard deviation of the parameter noise vectors
     parser.add_argument("--deltas",       "-d",   default=64, type=int)                 # number of parameter noise vectors to use
@@ -196,7 +216,7 @@ if __name__ == "__main__":
       Utility for running Recurrent/Deep Deterministic Policy Gradients.
     """
     from algos.dpg import run_experiment
-    parser.add_argument("--timesteps",       "-t",  default=1e6,   type=int)      # number of timesteps in replay buffer
+    parser.add_argument("--timesteps",       "-t",  default=1e6,   type=float)      # number of timesteps in replay buffer
     parser.add_argument("--start_timesteps",        default=1e4,   type=int)      # number of timesteps to generate random actions for
     parser.add_argument("--load_actor",             default=None,  type=str)      # load an actor from a .pt file
     parser.add_argument("--load_critic",            default=None,  type=str)      # load a critic from a .pt file
@@ -207,8 +227,7 @@ if __name__ == "__main__":
     parser.add_argument("--c_lr",           "-clr", default=1e-4,  type=float)    # adam learning rate for actor
     parser.add_argument("--traj_len",       "-tl",  default=1000,  type=int)      # max trajectory length for environment
     parser.add_argument("--center_reward",  "-r",   action='store_true')          # normalize rewards to a normal distribution
-    parser.add_argument("--normc_init",     "-r",   default=True,  type=bool)     # using col norm to init weights
-    parser.add_argument("--normalize",              action='store_true')          # normalize states online
+    parser.add_argument("--normc_init",             default=True,  type=bool)     # using col norm to init weights
     parser.add_argument("--normalize"       '-n',   action='store_true')          # normalize states online
     parser.add_argument("--batch_size",             default=64,    type=int)      # batch size for policy update
     parser.add_argument("--updates",                default=1,    type=int)       # (if recurrent) number of times to update policy per episode
@@ -243,7 +262,7 @@ if __name__ == "__main__":
     """
     from algos.td3 import run_experiment
     parser.add_argument("--timesteps",       "-t",  default=1e6,   type=float)    # number of timesteps in replay buffer
-    parser.add_argument("--start_timesteps",        default=1e4,   type=int)      # number of timesteps to generate random actions for
+    parser.add_argument("--start_timesteps",        default=1e4,   type=float)      # number of timesteps to generate random actions for
     parser.add_argument("--load_actor",             default=None,  type=str)      # load an actor from a .pt file
     parser.add_argument("--load_critic1",           default=None,  type=str)      # load a critic from a .pt file
     parser.add_argument("--load_critic2",           default=None,  type=str)      # load a critic from a .pt file
@@ -285,25 +304,30 @@ if __name__ == "__main__":
 
     """
     from algos.ppo import run_experiment
-    parser.add_argument("--seed",                   default=0,           type=int)      # number of timesteps to run experiment for
-    parser.add_argument("--timesteps",       "-t",  default=1e6,         type=int)      # number of timesteps to run experiment for
-    parser.add_argument("--env_name",               default='Cassie-v0', type=str)
-    parser.add_argument("--traj_len",       "-tl",  default=400,         type=int)      # max trajectory length for environment
-    parser.add_argument("--prenormalize_steps",     default=10000,       type=int)      
-    parser.add_argument("--num_steps",              default=1000,        type=int)      
+    parser.add_argument("--seed",                   default=0,             type=int)      # number of timesteps to run experiment for
+    parser.add_argument("--timesteps",       "-t",  default=1e6,           type=float)      # number of timesteps to run experiment for
+    parser.add_argument("--env_name",               default='Cassie-v0',   type=str)
+    parser.add_argument("--traj_len",       "-tl",  default=400,           type=int)      # max trajectory length for environment
+    parser.add_argument("--prenormalize_steps",     default=10000,         type=int)      
+    parser.add_argument("--num_steps",              default=5000,          type=int)      
+    parser.add_argument("--recurrent",              action='store_true')
 
-    parser.add_argument('--discount',               default=0.99,        type=float)    # the discount factor
-    parser.add_argument("--a_lr",           "-alr", default=1e-4,        type=float)    # adam learning rate for actor
-    parser.add_argument("--c_lr",           "-clr", default=5e-4,        type=float)    # adam learning rate for critic
-    parser.add_argument("--eps",            "-ep",  default=1e-5,        type=float)    # adam eps
-    parser.add_argument("--entropy_coeff",          default=0.0,         type=float)
-    parser.add_argument("--grad_clip",              default=0.05,        type=float)
-    parser.add_argument("--batch_size",             default=64,          type=int)      # batch size for policy update
-    parser.add_argument("--epochs",                 default=5,           type=int)      # number of updates per iter
+    parser.add_argument('--discount',               default=0.99,          type=float)    # the discount factor
+    parser.add_argument('--std',                    default=0.13,          type=float)    # the fixed exploration std
+    parser.add_argument("--a_lr",           "-alr", default=1e-4,          type=float)    # adam learning rate for actor
+    parser.add_argument("--c_lr",           "-clr", default=1e-4,          type=float)    # adam learning rate for critic
+    parser.add_argument("--eps",            "-ep",  default=1e-5,          type=float)    # adam eps
+    parser.add_argument("--kl",                     default=0.02,          type=float)    # kl abort threshold
+    parser.add_argument("--entropy_coeff",          default=0.0,           type=float)
+    parser.add_argument("--grad_clip",              default=0.05,          type=float)
+    parser.add_argument("--batch_size",             default=64,            type=int)      # batch size for policy update
+    parser.add_argument("--epochs",                 default=3,             type=int)      # number of updates per iter
 
-    parser.add_argument("--save_actor",             default=None,        type=str)
-    parser.add_argument("--save_critic",            default=None,        type=str)
+    parser.add_argument("--save_actor",             default=None,          type=str)
+    parser.add_argument("--save_critic",            default=None,          type=str)
     parser.add_argument("--logdir",                 default="./logs/ppo/", type=str)
+    parser.add_argument("--workers",                default=4,             type=int)
+    parser.add_argument("--redis",                  default=None,          type=str)
     args = parser.parse_args()
 
     run_experiment(args)
@@ -319,5 +343,67 @@ if __name__ == "__main__":
     policy = torch.load(args.policy)
 
     eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len)
+
+  elif sys.argv[1] == 'pppo':
+    sys.argv.remove(sys.argv[1])
+    from algos.pedro_ppo import run_experiment
+    parser.add_argument("--policy_name", type=str, default="PPO")
+    parser.add_argument("--env_name", "-e",   default="Cassie-v0")
+    parser.add_argument("--logdir", type=str, default="./logs/pedro/")                  # Where to log diagnostics to
+    parser.add_argument("--previous", type=str, default=None)                           # path to directory of previous policies for resuming training
+    parser.add_argument("--seed", default=0, type=int)                                  # Sets Gym, PyTorch and Numpy seeds
+    parser.add_argument("--mirror", default=False, action='store_true')                 # mirror actions or not   
+    parser.add_argument("--redis_address", type=str, default=None)                      # address of redis server (for cluster setups)
+    parser.add_argument("--viz_port", default=8097)                                     # (deprecated) visdom server port
+
+    # PPO algo args
+    parser.add_argument("--input_norm_steps", type=int, default=10000)
+    parser.add_argument("--n_itr", type=int, default=10000, help="Number of iterations of the learning algorithm")
+    parser.add_argument("--lr", type=float, default=1e-4, help="Adam learning rate") # Xie
+    parser.add_argument("--eps", type=float, default=1e-5, help="Adam epsilon (for numerical stability)")
+    parser.add_argument("--lam", type=float, default=0.95, help="Generalized advantage estimate discount")
+    parser.add_argument("--gamma", type=float, default=0.99, help="MDP discount")
+    parser.add_argument("--entropy_coeff", type=float, default=0.0, help="Coefficient for entropy regularization")
+    parser.add_argument("--clip", type=float, default=0.2, help="Clipping parameter for PPO surrogate loss")
+    parser.add_argument("--minibatch_size", type=int, default=64, help="Batch size for PPO updates")
+    parser.add_argument("--epochs", type=int, default=3, help="Number of optimization epochs per PPO update") #Xie
+    parser.add_argument("--num_steps", type=int, default=5096, help="Number of sampled timesteps per gradient estimate")
+    parser.add_argument("--use_gae", type=bool, default=True,help="Whether or not to calculate returns using Generalized Advantage Estimation")
+    parser.add_argument("--num_procs", type=int, default=30, help="Number of threads to train on")
+    parser.add_argument("--max_grad_norm", type=float, default=0.05, help="Value to clip gradients at.")
+    parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode horizon")
+
+    # arg for training on aslipik_env
+    parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
+
+    args = parser.parse_args()
+
+
+    run_experiment(args)
+
+  elif sys.argv[1] == 'og_ppo':
+    sys.argv.remove(sys.argv[1])
+    from algos.og_ppo import run_experiment
+    parser.add_argument("--seed", type=int, default=1,
+                        help="RNG seed")
+    parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
+                        help="Where to log diagnostics to")
+    parser.add_argument("--name", type=str, default="model")
+    parser.add_argument("--env_name", type=str, default="Cassie-v0")
+    parser.add_argument("--gamma", default=0.99)
+    parser.add_argument("--lam", default=0.0)
+    parser.add_argument("--lr", default=3e-4)
+    parser.add_argument("--eps", default=1e-5)
+    parser.add_argument("--entropy_coeff", default=0.0)
+    parser.add_argument("--clip", default=0.2)
+    parser.add_argument("--batch_size", default=64)
+    parser.add_argument("--epochs", default=10)
+    parser.add_argument("--num_steps", default=5096)
+    parser.add_argument("--n_itr", default=10000)
+    parser.add_argument("--use_gae", default=False)
+
+
+    args = parser.parse_args()
+    run_experiment(args)
   else:
     print("Invalid algorithm '{}'".format(sys.argv[1]))

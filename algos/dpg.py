@@ -57,7 +57,7 @@ class ReplayBuffer():
     not_dones   = self.not_done[start_idx:end_idx]
 
     # Return an entire episode
-    return traj_states, actions, next_states, rewards, not_dones
+    return traj_states, actions, next_states, rewards, not_dones, 1
 
   def sample(self, batch_size, sample_trajectories=False, max_len=1000):
     if sample_trajectories:
@@ -72,18 +72,22 @@ class ReplayBuffer():
       rewards     = [traj[3] for traj in raw_traj]
       not_dones   = [traj[4] for traj in raw_traj]
 
+      # Get the trajectory mask for the critic
+      traj_mask = [torch.ones_like(reward) for reward in rewards]
+
       # Pad all trajectories to be the same length, shape is (traj_len x batch_size x dim)
       states      = pad_sequence(states, batch_first=False)
       actions     = pad_sequence(actions, batch_first=False)
       next_states = pad_sequence(next_states, batch_first=False)
       rewards     = pad_sequence(rewards, batch_first=False)
       not_dones   = pad_sequence(not_dones, batch_first=False)
+      traj_mask   = pad_sequence(traj_mask, batch_first=False)
 
-      return states, actions, next_states, rewards, not_dones, steps
+      return states, actions, next_states, rewards, not_dones, steps, traj_mask
 
     else:
       idx = np.random.randint(0, self.size, size=batch_size)
-      return self.state[idx], self.action[idx], self.next_state[idx], self.reward[idx], self.not_done[idx], batch_size
+      return self.state[idx], self.action[idx], self.next_state[idx], self.reward[idx], self.not_done[idx], batch_size, 1
 
 class DPG():
   def __init__(self, actor, critic, a_lr, c_lr, discount=0.99, tau=0.001, center_reward=False, normalize=False):
@@ -117,7 +121,7 @@ class DPG():
       target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
   def update_policy(self, replay_buffer, batch_size=256, traj_len=1000, grad_clip=None):
-    states, actions, next_states, rewards, not_dones, steps = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
+    states, actions, next_states, rewards, not_dones, steps, mask = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
 
     with torch.no_grad():
       if self.normalize:
@@ -125,9 +129,14 @@ class DPG():
         next_states = self.behavioral_actor.normalize_state(next_states, update=False)
 
       target_q = rewards + (not_dones * self.discount * self.target_critic(next_states, self.target_actor(next_states)))
+
     current_q = self.behavioral_critic(states, actions)
 
-    critic_loss = F.mse_loss(current_q, target_q)
+    #for i, target in enumerate(current_q[:,4]):
+    #  print("ACTUAL {}: {}".format(i, target))
+
+
+    critic_loss = F.mse_loss(current_q * mask, target_q * mask)
 
     self.critic_optimizer.zero_grad()
     critic_loss.backward()
@@ -137,7 +146,7 @@ class DPG():
 
     self.critic_optimizer.step()
 
-    actor_loss = -self.behavioral_critic(states, self.behavioral_actor(states)).mean()
+    actor_loss = -(self.behavioral_critic(states, self.behavioral_actor(states) * mask) * mask).mean()
 
     self.actor_optimizer.zero_grad()
     actor_loss.backward()
@@ -298,9 +307,9 @@ def run_experiment(args):
     if done:
       episode_elapsed = (time() - episode_start)
       episode_secs_per_sample = episode_elapsed / episode_timesteps
-      logger.add_scalar(args.env_name + ' episode length', episode_timesteps, iter)
-      logger.add_scalar(args.env_name + ' episode reward', episode_reward, iter)
-      logger.add_scalar(args.env_name + ' critic loss', episode_loss, iter)
+      logger.add_scalar(args.env_name + '/episode_length', episode_timesteps, iter)
+      logger.add_scalar(args.env_name + '/episode_return', episode_reward, iter)
+      logger.add_scalar(args.env_name + '/critic loss', episode_loss, iter)
 
       completion = 1 - float(timesteps) / args.timesteps
       avg_sample_r = (time() - training_start)/timesteps
@@ -310,8 +319,8 @@ def run_experiment(args):
 
       if iter % args.eval_every == 0 and iter != 0:
         eval_reward = eval_policy(algo.behavioral_actor, eval_env, max_traj_len=args.traj_len)
-        logger.add_scalar(args.env_name + ' eval episode', eval_reward, iter)
-        logger.add_scalar(args.env_name + ' eval timestep', eval_reward, timesteps)
+        logger.add_scalar(args.env_name + '/return', eval_reward, iter)
+        #logger.add_scalar(args.env_name + '', eval_reward, timesteps)
 
         print("evaluation after {:4d} episodes | return: {:7.3f} | timesteps {:9n}{:100s}".format(iter, eval_reward, timesteps, ''))
 

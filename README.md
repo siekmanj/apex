@@ -1,28 +1,28 @@
 ----
 
-Recurrent Reinforcement Learning
+# Recurrent Reinforcement Learning
+
+## Purpose
+
+This repo contains recurrent implementations of state-of-the-art RL algorithms. Its purpose is to be clean, legible, and easy to understand. Many RL algorithms treat recurrence as an afterthought - it is my opinion that recurrence has important theoretical and practical benefits to many RL problems, especially partially observable ones in the real world.
+
 
 ## Running experiments
 
 ### Basics
 Any algorithm can be run from the rll.py entry point.
 
-To run DDPG on Walker2d-v2,
+To run recurrent PPO on Walker2d-v2,
 
 ```bash
-python rll.py ddpg --env_name Walker2d-v2 --batch_size 64
+python rll.py ppo --env_name Walker2d-v2 --recurrent
 ```
 
 ### Logging details / Monitoring live training progress
-Tensorboard logging is enabled by default for all algorithms. The logger expects that you supply an argument named ```logdir```, containing the root directory you want to store your logfiles in, and an argument named ```seed```, which is used to seed the pseudorandom number generators.
+Tensorboard logging is enabled by default for all algorithms. By default, logs are stored in ```logs/[algo]/[env]/[experiment hash]```.
 
-A basic command line script illustrating this is:
+After initiating an experiment, your directory structure would look like this:
 
-```bash
-python rll.py ars --logdir logs/ars --seed 1337
-```
-
-The resulting directory tree would look something like this:
 ```
 logs/
 ├── ars
@@ -32,27 +32,20 @@ logs/
 └── rdpg
 ```
 
-Using tensorboard makes it easy to compare experiments and resume training later on.
-
-To see live training progress
-
-Run ```$ tensorboard --logdir=logs``` then navigate to ```http://localhost:6006/``` in your browser
+To see live training progress, run ```$ tensorboard --logdir=logs``` then navigate to ```http://localhost:6006/``` in your browser
 
 ### To Do
-- [ ] Recurrent TD3 and normal TD3
-
-### Notes
-
-Troubleshooting: X module not found? Make sure PYTHONPATH is configured. Make sure you run 
-examples from root directory.
+- [ ] Soft Actor-Critic
 
 ## Features:
 * Parallelism with [Ray](https://github.com/ray-project/ray)
 * [DDPG](https://arxiv.org/abs/1509.02971)
 * [RDPG](https://arxiv.org/abs/1512.04455)
 * [ARS](https://arxiv.org/abs/1803.07055)
+* [PPO](https://arxiv.org/abs/1707.06347)
+* [TD3](https://arxiv.org/abs/1802.09477)
 
-#### To be implemented long term:
+#### To be implemented soon:
 * [SAC](https://arxiv.org/abs/1801.01290)
 * [SVG](https://arxiv.org/abs/1510.09142)
 

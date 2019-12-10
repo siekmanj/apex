@@ -1,4 +1,5 @@
 from collections import OrderedDict
+import hashlib, os
 
 def create_logger(args):
   from torch.utils.tensorboard import SummaryWriter

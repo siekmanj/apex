@@ -105,7 +105,6 @@ class CassieEnv_v2:
         target = action + ref_pos[self.pos_idx]
       else:
         target = action + self.offset
-
       
       self.u = pd_in_t()
       for i in range(5):
@@ -172,8 +171,8 @@ class CassieEnv_v2:
       # Randomize dynamics:
       if self.dynamics_randomization:
           damp = self.default_damping
-          weak_factor = 1
-          strong_factor = 1
+          weak_factor = 1.2
+          strong_factor = 1.7
           pelvis_damp_range = [[damp[0], damp[0]], 
                                [damp[1], damp[1]], 
                                [damp[2], damp[2]], 
@@ -228,10 +227,10 @@ class CassieEnv_v2:
           mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
           mass_noise = [np.random.uniform(a, b) for a, b in mass_range]
 
-          delta = 0.001
+          delta = 0.0025
           com_noise = [0, 0, 0] + [self.default_ipos[i] + np.random.uniform(-delta, delta) for i in range(3, len(self.default_ipos))]
 
-          fric_noise = [np.random.uniform(0.3, 1.3)] + list(self.default_fric[1:])
+          fric_noise = [np.random.uniform(0.2, 1.5)] + list(self.default_fric[1:])
 
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))

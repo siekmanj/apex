@@ -197,7 +197,7 @@ if __name__ == "__main__":
     sys.argv.remove(sys.argv[1])
     from cassie.udp import run_udp
 
-    parser.add_argument("--policy", default=None, type=str)
+    parser.add_argument("--policy", default='logs/ppo/Cassie-nodelta-stateest-clockbased/bcbc77-seed0/actor.pt', type=str)
     args = parser.parse_args()
 
     run_udp(args)

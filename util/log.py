@@ -1,6 +1,14 @@
 from collections import OrderedDict
 import hashlib, os
 
+
+class color:
+ BOLD   = '\033[1m\033[48m'
+ END    = '\033[0m'
+ ORANGE = '\033[38;5;202m'
+ BLACK  = '\033[38;5;240m'
+
+
 def create_logger(args):
   from torch.utils.tensorboard import SummaryWriter
   """Use hyperparms to set a directory to output diagnostic files."""

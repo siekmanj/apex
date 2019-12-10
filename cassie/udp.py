@@ -5,6 +5,9 @@ import platform
 
 import sys
 import datetime
+
+import select, termios, tty
+
 from cassie.cassiemujoco.cassieUDP import *
 from cassie.cassiemujoco.cassiemujoco_ctypes import *
 
@@ -83,6 +86,9 @@ def euler2quat(z=0, y=0, x=0):
     	result = -result
     return result
 
+def check_stdin():
+  return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
+
 def run_udp(args):
   from util.env import env_factory
 
@@ -156,202 +162,33 @@ def run_udp(args):
   phase_add = 1
   speed = 0
 
-  max_speed = 0.15
-  min_speed = -0.5
+  max_speed = 5
+  min_speed = -1
   max_y_speed = 0.0
   min_y_speed = 0.0
 
-  while True:
+  old_settings = termios.tcgetattr(sys.stdin)
 
-    # Wait until next cycle time
-    while time.monotonic() - t < 60/2000:
-        time.sleep(0.001)
-    t = time.monotonic()
-    tt = time.monotonic() - t0
+  try:
+    tty.setcbreak(sys.stdin.fileno())
 
-    # Get newest state
-    state = cassie.recv_newest_pd()
+    while True:
 
-    if state is None:
-        print('Missed a cycle')
-        continue	
-
-    if platform.node() == 'cassie':
-
-      # Radio control
-      orient_add -= state.radio.channel[3] / 60.0
-
-      # Reset orientation on STO
-      if state.radio.channel[8] < 0:
-          orient_add = quaternion2euler(state.pelvis.orientation[:])[2]
-
-          # Save log files after STO toggle (skipping first STO)
-          if sto is False:
-              log(sto_count)
-              sto_count += 1
-              sto = True
-              # Clear out logs
-              time_log   = [] # time stamp
-              input_log  = [] # network inputs
-              output_log = [] # network outputs
-              state_log  = [] # cassie state
-              target_log = [] #PD target log
-
-          if hasattr(policy, 'init_hidden_state'):
-            policy.init_hidden_state()
-
-      else:
-          sto = False
-
-      # Switch the operation mode based on the toggle next to STO
-      if state.radio.channel[9] < -0.5: # towards operator means damping shutdown mode
-          operation_mode = 2
-      elif state.radio.channel[9] > 0.5: # away from the operator means that standing pose
-        operation_mode = 1
-        standing_height = MIN_HEIGHT + (MAX_HEIGHT - MIN_HEIGHT)*0.5*(state.radio.channel[6] + 1)
-      else:                               # Middle means normal walking
-        operation_mode = 0
-
-      curr_max = max_speed / 2
-      speed_add = (max_speed / 2) * state.radio.channel[4]
-      speed = max(min_speed, state.radio.channel[0] * curr_max + speed_add)
-      speed = min(max_speed, state.radio.channel[0] * curr_max + speed_add)
-
-      print("speed: ", speed)
-      phase_add = 1 + state.radio.channel[5]
-    else:
-      # Automatically change orientation and speed
+      # Wait until next cycle time
+      while time.monotonic() - t < 60/2000:
+          time.sleep(0.001)
+      t = time.monotonic()
       tt = time.monotonic() - t0
-      orient_add += 0
-      speed += 0.001
 
-      print("speed: ", speed)
+      # Get newest state
+      state = cassie.recv_newest_pd()
 
-      speed = max(min_speed, speed)
-      speed = min(max_speed, speed)
+      if state is None:
+          print('Missed a cycle!                ')
+          continue	
 
+      if platform.node() == 'cassie':
 
-    #------------------------------- Normal Walking ---------------------------
-    if operation_mode == 0:
-        
-        # Reassign because it might have been changed by the damping mode
-        for i in range(5):
-            u.leftLeg.motorPd.pGain[i] = env.P[i]
-            u.leftLeg.motorPd.dGain[i] = env.D[i]
-            u.rightLeg.motorPd.pGain[i] = env.P[i]
-            u.rightLeg.motorPd.dGain[i] = env.D[i]
-
-        clock = [np.sin(2 * np.pi *  phase / 27), np.cos(2 * np.pi *  phase / 27)]
-        quaternion = euler2quat(z=orient_add, y=0, x=0)
-        iquaternion = inverse_quaternion(quaternion)
-        new_orient = quaternion_product(iquaternion, state.pelvis.orientation[:])
-        if new_orient[0] < 0:
-            new_orient = -new_orient
-        new_translationalVelocity = rotate_by_quaternion(state.pelvis.translationalVelocity[:], iquaternion)
-            
-        ext_state = np.concatenate((clock, [speed]))
-        robot_state = np.concatenate([
-                [state.pelvis.position[2] - state.terrain.height], # pelvis height
-                new_orient,                                     # pelvis orientation
-                state.motor.position[:],                        # actuated joint positions
-
-                new_translationalVelocity[:],                   # pelvis translational velocity
-                state.pelvis.rotationalVelocity[:],             # pelvis rotational velocity 
-                state.motor.velocity[:],                        # actuated joint velocities
-
-                state.pelvis.translationalAcceleration[:],      # pelvis translational acceleration
-                
-                state.joint.position[:],                        # unactuated joint positions
-                state.joint.velocity[:]                         # unactuated joint velocities
-        ])
-        RL_state = np.concatenate([robot_state, ext_state])
-        
-        #pretending the height is always 1.0
-        #RL_state[0] = 1.0
-        
-        # Construct input vector
-        torch_state = torch.Tensor(RL_state)
-        torch_state = policy.normalize_state(torch_state, update=False)
-
-        if no_delta:
-          offset = env.offset
-        else:
-          offset = env.get_ref_state(phase=phase)
-
-        action = policy(torch_state)
-        env_action = action.data.numpy()
-        target = env_action + offset
-
-        # Send action
-        for i in range(5):
-            u.leftLeg.motorPd.pTarget[i] = target[i]
-            u.rightLeg.motorPd.pTarget[i] = target[i+5]
-        cassie.send_pd(u)
-
-        # Logging
-        if sto == False:
-            time_log.append(time.time())
-            state_log.append(state)
-            input_log.append(RL_state)
-            output_log.append(env_action)
-            target_log.append(target)
-    #------------------------------- Start Up Standing ---------------------------
-    elif operation_mode == 1:
-        print('Startup Standing. Height = ' + str(standing_height))
-        #Do nothing
-        # Reassign with new multiplier on damping
-        for i in range(5):
-            u.leftLeg.motorPd.pGain[i] = 0.0
-            u.leftLeg.motorPd.dGain[i] = 0.0
-            u.rightLeg.motorPd.pGain[i] = 0.0
-            u.rightLeg.motorPd.dGain[i] = 0.0
-
-        # Send action
-        for i in range(5):
-            u.leftLeg.motorPd.pTarget[i] = 0.0
-            u.rightLeg.motorPd.pTarget[i] = 0.0
-        cassie.send_pd(u)
-
-    #------------------------------- Shutdown Damping ---------------------------
-    elif operation_mode == 2:
-
-        print('Shutdown Damping. Multiplier = ' + str(D_mult))
-        # Reassign with new multiplier on damping
-        for i in range(5):
-            u.leftLeg.motorPd.pGain[i] = 0.0
-            u.leftLeg.motorPd.dGain[i] = D_mult*D[i]
-            u.rightLeg.motorPd.pGain[i] = 0.0
-            u.rightLeg.motorPd.dGain[i] = D_mult*D[i]
-
-        # Send action
-        for i in range(5):
-            u.leftLeg.motorPd.pTarget[i] = 0.0
-            u.rightLeg.motorPd.pTarget[i] = 0.0
-        cassie.send_pd(u)
-
-    #---------------------------- Other, should not happen -----------------------
-    else:
-        print('Error, In bad operation_mode with value: ' + str(operation_mode))
-    
-    # Measure delay
-    #print('delay: {:6.1f} ms'.format((time.monotonic() - t) * 1000))
-
-    # Track phase
-    phase += phase_add
-    if phase >= 28:
-        phase = 0
-        counter += 1
-    #print("RAN TIMESTEP")
-
-
-"""
-------------------
-"""
-
-
-"""
-while True:
-    if platform.node() == 'cassie':
         # Radio control
         orient_add -= state.radio.channel[3] / 60.0
 
@@ -367,155 +204,164 @@ while True:
                 # Clear out logs
                 time_log   = [] # time stamp
                 input_log  = [] # network inputs
-                output_log = [] # network outputs 
+                output_log = [] # network outputs
                 state_log  = [] # cassie state
                 target_log = [] #PD target log
+
+            if hasattr(policy, 'init_hidden_state'):
+              policy.init_hidden_state()
+
         else:
             sto = False
 
         # Switch the operation mode based on the toggle next to STO
         if state.radio.channel[9] < -0.5: # towards operator means damping shutdown mode
             operation_mode = 2
-            #D_mult = 5.5 + 4.5* state.radio.channel[7]     # Tune with right side knob 1x-10x (went unstable really fast)
-                                                            # Consider using this for some sort of p gain based 
-
         elif state.radio.channel[9] > 0.5: # away from the operator means that standing pose
-            operation_mode = 1
-            standing_height = MIN_HEIGHT + (MAX_HEIGHT - MIN_HEIGHT)*0.5*(state.radio.channel[6] + 1)
+          operation_mode = 1
+          standing_height = MIN_HEIGHT + (MAX_HEIGHT - MIN_HEIGHT)*0.5*(state.radio.channel[6] + 1)
+        else:                               # Middle means normal walking
+          operation_mode = 0
 
-        else:                               # Middle means normal walking 
-            operation_mode = 0
-        
-        curr_max = max_speed / 2# + (max_speed / 2)*state.radio.channel[4]
+        curr_max = max_speed / 2
         speed_add = (max_speed / 2) * state.radio.channel[4]
         speed = max(min_speed, state.radio.channel[0] * curr_max + speed_add)
         speed = min(max_speed, state.radio.channel[0] * curr_max + speed_add)
-        
-        print("speed: ", speed)
-        phase_add = 1+state.radio.channel[5]
-        # env.y_speed = max(min_y_speed, -state.radio.channel[1] * max_y_speed)
-        # env.y_speed = min(max_y_speed, -state.radio.channel[1] * max_y_speed)
-    else:
+
+        #print("speed: ", speed, end='\r')
+        phase_add = 1 + state.radio.channel[5]
+      else:
         # Automatically change orientation and speed
         tt = time.monotonic() - t0
-        orient_add += 0#math.sin(t / 8) / 400
-        #env.speed = 0.2
-        speed += 0.001#((math.sin(tt / 2)) * max_speed)
-        print("speed: ", speed)
-        #if env.phase % 14 == 0:
-        #	env.speed = (random.randint(-1, 1)) / 2.0
-        # print(env.speed)
+
+        if check_stdin():
+          c = sys.stdin.read(1)
+          if c == 'w':
+            speed += 0.1
+          if c == 's':
+            speed -= 0.1
+          if c == 'a':
+            orient_add -= 0.1
+          if c == 'd':
+            orient_add += 0.1
+          if c == 'r':
+            speed = 0.5
+            orient_add = 0
+
+        print("speed: {:3.2f} | orientation {:3.2f}".format(speed, orient_add), end='\r')
+
         speed = max(min_speed, speed)
         speed = min(max_speed, speed)
-        # env.y_speed = (math.sin(tt / 2)) * max_y_speed
-        # env.y_speed = max(min_y_speed, env.y_speed)
-        # env.y_speed = min(max_y_speed, env.y_speed)
 
-    #------------------------------- Normal Walking ---------------------------
-    if operation_mode == 0:
-        
-        # Reassign because it might have been changed by the damping mode
-        for i in range(5):
-            u.leftLeg.motorPd.pGain[i] = P[i]
-            u.leftLeg.motorPd.dGain[i] = D[i]
-            u.rightLeg.motorPd.pGain[i] = P[i+5]
-            u.rightLeg.motorPd.dGain[i] = D[i+5]
+      #------------------------------- Normal Walking ---------------------------
+      if operation_mode == 0:
+          
+          # Reassign because it might have been changed by the damping mode
+          for i in range(5):
+              u.leftLeg.motorPd.pGain[i] = env.P[i]
+              u.leftLeg.motorPd.dGain[i] = env.D[i]
+              u.rightLeg.motorPd.pGain[i] = env.P[i]
+              u.rightLeg.motorPd.dGain[i] = env.D[i]
 
-        clock = [np.sin(2 * np.pi *  phase / 27), np.cos(2 * np.pi *  phase / 27)]
-        quaternion = euler2quat(z=orient_add, y=0, x=0)
-        iquaternion = inverse_quaternion(quaternion)
-        new_orient = quaternion_product(iquaternion, state.pelvis.orientation[:])
-        if new_orient[0] < 0:
-            new_orient = -new_orient
-        new_translationalVelocity = rotate_by_quaternion(state.pelvis.translationalVelocity[:], iquaternion)
-        print('new_orientation: {}'.format(new_orient))
-            
-        ext_state = np.concatenate((clock, [speed]))
-        robot_state = np.concatenate([
-                [state.pelvis.position[2] - state.terrain.height], # pelvis height
-                new_orient,                                     # pelvis orientation
-                state.motor.position[:],                        # actuated joint positions
+          clock = [np.sin(2 * np.pi *  phase / 27), np.cos(2 * np.pi *  phase / 27)]
+          quaternion = euler2quat(z=orient_add, y=0, x=0)
+          iquaternion = inverse_quaternion(quaternion)
+          new_orient = quaternion_product(iquaternion, state.pelvis.orientation[:])
+          if new_orient[0] < 0:
+              new_orient = -new_orient
+          new_translationalVelocity = rotate_by_quaternion(state.pelvis.translationalVelocity[:], iquaternion)
+              
+          ext_state = np.concatenate((clock, [speed]))
+          robot_state = np.concatenate([
+                  [state.pelvis.position[2] - state.terrain.height], # pelvis height
+                  new_orient,                                     # pelvis orientation
+                  state.motor.position[:],                        # actuated joint positions
 
-                new_translationalVelocity[:],                   # pelvis translational velocity
-                state.pelvis.rotationalVelocity[:],             # pelvis rotational velocity 
-                state.motor.velocity[:],                        # actuated joint velocities
+                  new_translationalVelocity[:],                   # pelvis translational velocity
+                  state.pelvis.rotationalVelocity[:],             # pelvis rotational velocity 
+                  state.motor.velocity[:],                        # actuated joint velocities
 
-                state.pelvis.translationalAcceleration[:],      # pelvis translational acceleration
-                
-                state.joint.position[:],                        # unactuated joint positions
-                state.joint.velocity[:]                         # unactuated joint velocities
-        ])
-        RL_state = np.concatenate([robot_state, ext_state])
-        
-        #pretending the height is always 1.0
-        RL_state[0] = 1.0
-        
-        # Construct input vector
-        torch_state = torch.Tensor(RL_state)
-        # torch_state = shared_obs_stats.normalize(torch_state)
+                  state.pelvis.translationalAcceleration[:],      # pelvis translational acceleration
+                  
+                  state.joint.position[:],                        # unactuated joint positions
+                  state.joint.velocity[:]                         # unactuated joint velocities
+          ])
+          RL_state = np.concatenate([robot_state, ext_state])
+          
+          #pretending the height is always 1.0
+          #RL_state[0] = 1.0
+          
+          # Construct input vector
+          torch_state = torch.Tensor(RL_state)
+          torch_state = policy.normalize_state(torch_state, update=False)
 
-        # Get action
-        _, action = policy.act(torch_state, True)
-        env_action = action.data.numpy()
-        target = env_action + offset
+          if no_delta:
+            offset = env.offset
+          else:
+            offset = env.get_ref_state(phase=phase)
 
-        # Send action
-        for i in range(5):
-            u.leftLeg.motorPd.pTarget[i] = target[i]
-            u.rightLeg.motorPd.pTarget[i] = target[i+5]
-        cassie.send_pd(u)
+          action = policy(torch_state)
+          env_action = action.data.numpy()
+          target = env_action + offset
 
-        # Logging
-        if sto == False:
-            time_log.append(time.time())
-            state_log.append(state)
-            input_log.append(RL_state)
-            output_log.append(env_action)
-            target_log.append(target)
-    #------------------------------- Start Up Standing ---------------------------
-    elif operation_mode == 1:
-        print('Startup Standing. Height = ' + str(standing_height))
-        #Do nothing
-        # Reassign with new multiplier on damping
-        for i in range(5):
-            u.leftLeg.motorPd.pGain[i] = 0.0
-            u.leftLeg.motorPd.dGain[i] = 0.0
-            u.rightLeg.motorPd.pGain[i] = 0.0
-            u.rightLeg.motorPd.dGain[i] = 0.0
+          # Send action
+          for i in range(5):
+              u.leftLeg.motorPd.pTarget[i] = target[i]
+              u.rightLeg.motorPd.pTarget[i] = target[i+5]
+          cassie.send_pd(u)
 
-        # Send action
-        for i in range(5):
-            u.leftLeg.motorPd.pTarget[i] = 0.0
-            u.rightLeg.motorPd.pTarget[i] = 0.0
-        cassie.send_pd(u)
+          # Logging
+          if sto == False:
+              time_log.append(time.time())
+              state_log.append(state)
+              input_log.append(RL_state)
+              output_log.append(env_action)
+              target_log.append(target)
+      #------------------------------- Start Up Standing ---------------------------
+      elif operation_mode == 1:
+          print('Startup Standing. Height = ' + str(standing_height))
+          #Do nothing
+          # Reassign with new multiplier on damping
+          for i in range(5):
+              u.leftLeg.motorPd.pGain[i] = 0.0
+              u.leftLeg.motorPd.dGain[i] = 0.0
+              u.rightLeg.motorPd.pGain[i] = 0.0
+              u.rightLeg.motorPd.dGain[i] = 0.0
 
-    #------------------------------- Shutdown Damping ---------------------------
-    elif operation_mode == 2:
+          # Send action
+          for i in range(5):
+              u.leftLeg.motorPd.pTarget[i] = 0.0
+              u.rightLeg.motorPd.pTarget[i] = 0.0
+          cassie.send_pd(u)
 
-        print('Shutdown Damping. Multiplier = ' + str(D_mult))
-        # Reassign with new multiplier on damping
-        for i in range(5):
-            u.leftLeg.motorPd.pGain[i] = 0.0
-            u.leftLeg.motorPd.dGain[i] = D_mult*D[i]
-            u.rightLeg.motorPd.pGain[i] = 0.0
-            u.rightLeg.motorPd.dGain[i] = D_mult*D[i+5]
+      #------------------------------- Shutdown Damping ---------------------------
+      elif operation_mode == 2:
 
-        # Send action
-        for i in range(5):
-            u.leftLeg.motorPd.pTarget[i] = 0.0
-            u.rightLeg.motorPd.pTarget[i] = 0.0
-        cassie.send_pd(u)
+          print('Shutdown Damping. Multiplier = ' + str(D_mult))
+          # Reassign with new multiplier on damping
+          for i in range(5):
+              u.leftLeg.motorPd.pGain[i] = 0.0
+              u.leftLeg.motorPd.dGain[i] = D_mult*D[i]
+              u.rightLeg.motorPd.pGain[i] = 0.0
+              u.rightLeg.motorPd.dGain[i] = D_mult*D[i]
 
-    #---------------------------- Other, should not happen -----------------------
-    else:
-        print('Error, In bad operation_mode with value: ' + str(operation_mode))
-    
-    # Measure delay
-    print('delay: {:6.1f} ms'.format((time.monotonic() - t) * 1000))
+          # Send action
+          for i in range(5):
+              u.leftLeg.motorPd.pTarget[i] = 0.0
+              u.rightLeg.motorPd.pTarget[i] = 0.0
+          cassie.send_pd(u)
 
-    # Track phase
-    phase += phase_add
-    if phase >= 28:
-        phase = 0
-        counter += 1
-"""
+      #---------------------------- Other, should not happen -----------------------
+      else:
+          print('Error, In bad operation_mode with value: ' + str(operation_mode))
+      
+      # Measure delay
+      #print('delay: {:6.1f} ms'.format((time.monotonic() - t) * 1000))
+
+      # Track phase
+      phase += phase_add
+      if phase >= 28:
+          phase = 0
+          counter += 1
+  finally:
+    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)

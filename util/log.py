@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 def create_logger(args):
   from torch.utils.tensorboard import SummaryWriter
   """Use hyperparms to set a directory to output diagnostic files."""

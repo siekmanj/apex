@@ -199,7 +199,7 @@ class LSTM_Actor(Actor):
     return self.action
 
 class LSTM_Stochastic_Actor(Actor):
-  def __init__(self, state_dim, action_dim, layers=(128, 64), env_name=None, nonlinearity=F.tanh, normc_init=False, max_action=1, fixed_std=None):
+  def __init__(self, state_dim, action_dim, layers=(128, 128), env_name=None, nonlinearity=F.tanh, normc_init=False, max_action=1, fixed_std=None):
     super(LSTM_Stochastic_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()

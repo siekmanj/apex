@@ -282,10 +282,10 @@ class PPO:
 
       start  = time()
       kls    = []
-      a_loss = []
-      c_loss = []
       done = False
       for epoch in range(epochs):
+        a_loss = []
+        c_loss = []
         for batch in memory.sample(batch_size=batch_size, recurrent=self.recurrent):
           states, actions, returns, advantages, mask = batch
           
@@ -298,8 +298,10 @@ class PPO:
               done = True
               print("\t\tbatch had kl of {} (threshold {}), stopping optimization early.".format(max(kls), kl_thresh))
               break
+
         if verbose:
           print("\t\tepoch {:2d} kl {:4.3f}, actor loss {:6.3f}, critic loss {:6.3f}".format(epoch+1, np.mean(kls), np.mean(a_loss), np.mean(c_loss)))
+
         if done:
           break
 

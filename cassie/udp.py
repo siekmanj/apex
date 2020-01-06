@@ -341,9 +341,9 @@ def run_udp(args):
           # Reassign with new multiplier on damping
           for i in range(5):
               u.leftLeg.motorPd.pGain[i] = 0.0
-              u.leftLeg.motorPd.dGain[i] = D_mult*D[i]
+              u.leftLeg.motorPd.dGain[i] = D_mult*env.D[i]
               u.rightLeg.motorPd.pGain[i] = 0.0
-              u.rightLeg.motorPd.dGain[i] = D_mult*D[i]
+              u.rightLeg.motorPd.dGain[i] = D_mult*env.D[i]
 
           # Send action
           for i in range(5):

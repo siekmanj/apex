@@ -54,7 +54,7 @@ class TD3():
   def update_policy(self, replay_buffer, batch_size=256, traj_len=1000, grad_clip=None, noise_clip=0.2):
     self.n += 1
 
-    states, actions, next_states, rewards, not_dones, steps = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
+    states, actions, next_states, rewards, not_dones, steps, mask = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
 
     with torch.no_grad():
       if self.normalize:
@@ -67,10 +67,10 @@ class TD3():
       target_q1 = self.target_q1(next_states, next_actions)
       target_q2 = self.target_q2(next_states, next_actions)
 
-      target_q = rewards + not_dones * self.discount * torch.min(target_q1, target_q2)
+      target_q = rewards + not_dones * self.discount * torch.min(target_q1, target_q2) * mask
 
-    current_q1 = self.behavioral_q1(states, actions)
-    current_q2 = self.behavioral_q2(states, actions)
+    current_q1 = self.behavioral_q1(states, actions) * mask
+    current_q2 = self.behavioral_q2(states, actions) * mask
 
     critic_loss = F.mse_loss(current_q1, target_q) + F.mse_loss(current_q2, target_q)
 
@@ -83,7 +83,7 @@ class TD3():
     self.q2_optimizer.step()
 
     if self.n % self.update_every == 0:
-      actor_loss = -self.behavioral_q1(states, self.behavioral_actor(states)).mean()
+      actor_loss = -(self.behavioral_q1(states, self.behavioral_actor(states) * mask) * mask).mean()
 
       self.actor_optimizer.zero_grad()
       actor_loss.backward()
@@ -100,7 +100,8 @@ class TD3():
 def run_experiment(args):
   from time import time
 
-  from rrl import env_factory, create_logger
+  from util.log import create_logger
+  from util.env import env_factory
   from policies.critic import FF_Q, LSTM_Q
   from policies.actor import FF_Actor, LSTM_Actor
 

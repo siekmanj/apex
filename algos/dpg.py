@@ -128,15 +128,15 @@ class DPG():
         states      = self.behavioral_actor.normalize_state(states, update=False)
         next_states = self.behavioral_actor.normalize_state(next_states, update=False)
 
-      target_q = rewards + (not_dones * self.discount * self.target_critic(next_states, self.target_actor(next_states)))
+      target_q = rewards + (not_dones * self.discount * self.target_critic(next_states, self.target_actor(next_states))) * mask
 
-    current_q = self.behavioral_critic(states, actions)
+    current_q = self.behavioral_critic(states, actions) * mask
 
     #for i, target in enumerate(current_q[:,4]):
     #  print("ACTUAL {}: {}".format(i, target))
 
 
-    critic_loss = F.mse_loss(current_q * mask, target_q * mask)
+    critic_loss = F.mse_loss(current_q, target_q)
 
     self.critic_optimizer.zero_grad()
     critic_loss.backward()

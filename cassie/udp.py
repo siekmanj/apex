@@ -198,7 +198,7 @@ def run_udp(args):
 
             # Save log files after STO toggle (skipping first STO)
             if sto is False:
-                log(sto_count)
+                #log(sto_count)
                 sto_count += 1
                 sto = True
                 # Clear out logs

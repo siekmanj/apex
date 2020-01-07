@@ -283,10 +283,10 @@ class CassieEnv_v2:
 
           spring_error += 1000 * (target - actual) ** 2      
       
-      reward = 0.5 * np.exp(-joint_error) +       \
-               0.3 * np.exp(-com_error) +         \
-               0.1 * np.exp(-orientation_error) + \
-               0.1 * np.exp(-spring_error)
+      reward = 0.07 * np.exp(-joint_error) +       \
+               0.45 * np.exp(-com_error) +         \
+               0.45 * np.exp(-orientation_error) + \
+               0.03 * np.exp(-spring_error)
 
       return reward
 

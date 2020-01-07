@@ -171,8 +171,8 @@ class CassieEnv_v2:
       # Randomize dynamics:
       if self.dynamics_randomization:
           damp = self.default_damping
-          weak_factor = 2
-          strong_factor = 2
+          weak_factor = 1.4
+          strong_factor = 1.4
           pelvis_damp_range = [[damp[0], damp[0]], 
                                [damp[1], damp[1]], 
                                [damp[2], damp[2]], 
@@ -230,7 +230,7 @@ class CassieEnv_v2:
           delta = 0.001
           com_noise = [0, 0, 0] + [self.default_ipos[i] + np.random.uniform(-delta, delta) for i in range(3, len(self.default_ipos))]
 
-          fric_noise = [np.random.uniform(0.2, 1.5)] + list(self.default_fric[1:])
+          fric_noise = [np.random.uniform(0.3, 1.5)] + list(self.default_fric[1:])
 
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))
@@ -286,10 +286,10 @@ class CassieEnv_v2:
 
           spring_error += 1000 * (target - actual) ** 2      
       
-      reward = 0.5 * np.exp(-joint_error) +       \
-               0.3 * np.exp(-com_error) +         \
-               0.1 * np.exp(-orientation_error) + \
-               0.1 * np.exp(-spring_error)
+      reward = 0.05 * np.exp(-joint_error) +       \
+               0.5 * np.exp(-com_error) +         \
+               0.4 * np.exp(-orientation_error) + \
+               0.05 * np.exp(-spring_error)
 
       return reward
 

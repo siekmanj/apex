@@ -272,12 +272,9 @@ class CassieEnv_v2:
 
           com_error += (target - actual) ** 2
       
-      # COM orientation: qx, qy, qz
-      for j in [4, 5, 6]:
-          target = ref_pos[j] # NOTE: in Xie et al orientation target is 0
-          actual = qpos[j]
-
-          orientation_error += (target - actual) ** 2
+      actual_q = qpos[3:7]
+      target_q = [1, 0, 0, 0]
+      orientation_error = 1 - np.inner(actual_q, target_q) ** 2
 
       # left and right shin springs
       for i in [15, 29]:

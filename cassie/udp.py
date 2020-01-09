@@ -173,11 +173,8 @@ def run_udp(args):
     tty.setcbreak(sys.stdin.fileno())
 
     while True:
-
-      # Wait until next cycle time
-      while time.monotonic() - t < 60/2000:
-          time.sleep(0.001)
       t = time.monotonic()
+
       tt = time.monotonic() - t0
 
       # Get newest state
@@ -358,6 +355,10 @@ def run_udp(args):
           print('Error, In bad operation_mode with value: ' + str(operation_mode))
       
       # Measure delay
+      # Wait until next cycle time
+      while time.monotonic() - t < 60/2000:
+          print("LOOP TIME {} of {}!".format(time.monotonic() - t, 60/2000))
+          time.sleep(0.001)
       print('delay: {:6.1f} ms'.format((time.monotonic() - t) * 1000))
 
       # Track phase

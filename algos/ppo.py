@@ -313,7 +313,8 @@ def eval_policy(policy, env, update_normalizer, min_timesteps=2000, max_traj_len
   with torch.no_grad():
     steps = 0
     ep_returns = []
-    while steps < min_timesteps: # Prenormalize
+    while steps < min_timesteps:
+      env.dynamics_randomization = False
       state = torch.Tensor(env.reset())
       done = False
       traj_len = 0

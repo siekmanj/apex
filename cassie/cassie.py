@@ -230,7 +230,7 @@ class CassieEnv_v2:
           delta = 0.001
           com_noise = [0, 0, 0] + [self.default_ipos[i] + np.random.uniform(-delta, delta) for i in range(3, len(self.default_ipos))]
 
-          fric_noise = [np.random.uniform(0.2, 1.5)] + list(self.default_fric[1:])
+          fric_noise = [np.random.uniform(0.5, 1.5)] + [np.random.uniform(1e-3, 1e-2)] + list(self.default_fric[2:])
 
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))
@@ -272,12 +272,10 @@ class CassieEnv_v2:
 
           com_error += (target - actual) ** 2
       
-      # COM orientation: qx, qy, qz
-      for j in [4, 5, 6]:
-          target = ref_pos[j] # NOTE: in Xie et al orientation target is 0
-          actual = qpos[j]
-
-          orientation_error += (target - actual) ** 2
+      actual_q = qpos[3:7]
+      target_q = ref_pos[3:7]
+      #target_q = [1, 0, 0, 0]
+      orientation_error = 1 - np.inner(actual_q, target_q) ** 2
 
       # left and right shin springs
       for i in [15, 29]:
@@ -286,10 +284,10 @@ class CassieEnv_v2:
 
           spring_error += 1000 * (target - actual) ** 2      
       
-      reward = 0.5 * np.exp(-joint_error) +       \
-               0.3 * np.exp(-com_error) +         \
-               0.1 * np.exp(-orientation_error) + \
-               0.1 * np.exp(-spring_error)
+      reward = 0.10 * np.exp(-joint_error) +       \
+               0.50 * np.exp(-com_error) +         \
+               0.40 * np.exp(-orientation_error) + \
+               0.00 * np.exp(-spring_error)
 
       return reward
 
@@ -411,26 +409,41 @@ class CassieEnv_v2:
 
 
 # qpos layout
-# [ 0] Pelvis y
-# [ 1] Pelvis z
-# [ 2] Pelvis orientation qw
-# [ 3] Pelvis orientation qx
-# [ 4] Pelvis orientation qy
-# [ 5] Pelvis orientation qz
-# [ 6] Left hip roll         (Motor [0])
-# [ 7] Left hip yaw          (Motor [1])
-# [ 8] Left hip pitch        (Motor [2])
-# [ 9] Left knee             (Motor [3])
-# [10] Left shin                        (Joint [0])
-# [11] Left tarsus                      (Joint [1])
-# [12] Left foot             (Motor [4], Joint [2])
-# [13] Right hip roll        (Motor [5])
-# [14] Right hip yaw         (Motor [6])
-# [15] Right hip pitch       (Motor [7])
-# [16] Right knee            (Motor [8])
-# [17] Right shin                       (Joint [3])
-# [18] Right tarsus                     (Joint [4])
-# [19] Right foot            (Motor [9], Joint [5])
+# [ 0] Pelvis x
+# [ 1] Pelvis y
+# [ 2] Pelvis z
+# [ 3] Pelvis orientation qw
+# [ 4] Pelvis orientation qx
+# [ 5] Pelvis orientation qy
+# [ 6] Pelvis orientation qz
+# [ 7] Left hip roll         (Motor [0])
+# [ 8] Left hip yaw          (Motor [1])
+# [ 9] Left hip pitch        (Motor [2])
+# [10] Left achilles rod qw
+# [11] Left achilles rod qx
+# [12] Left achilles rod qy
+# [13] Left achilles rod qz
+# [14] Left knee             (Motor [3])
+# [15] Left shin                        (Joint [0])
+# [16] Left tarsus                      (Joint [1])
+# [17] Left heel spring
+# [18] Left foot crank
+# [19] Left plantar rod
+# [20] Left foot             (Motor [4], Joint [2])
+# [21] Right hip roll        (Motor [5])
+# [22] Right hip yaw         (Motor [6])
+# [23] Right hip pitch       (Motor [7])
+# [24] Right achilles rod qw
+# [25] Right achilles rod qx
+# [26] Right achilles rod qy
+# [27] Right achilles rod qz
+# [28] Right knee            (Motor [8])
+# [29] Right shin                       (Joint [3])
+# [30] Right tarsus                     (Joint [4])
+# [31] Right heel spring
+# [32] Right foot crank
+# [33] Right plantar rod
+# [34] Right foot            (Motor [9], Joint [5])
 
 # qvel layout
 # [ 0] Pelvis x

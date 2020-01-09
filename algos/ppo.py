@@ -386,6 +386,9 @@ def run_experiment(args):
     if args.save_actor is None and logger is not None:
       args.save_actor = os.path.join(logger.dir, 'actor.pt')
 
+    if args.save_critic is None and logger is not None:
+      args.save_critic = os.path.join(logger.dir, 'critic.pt')
+
     print()
     print("Proximal Policy Optimization:")
     print("\tseed:               {}".format(args.seed))
@@ -419,6 +422,9 @@ def run_experiment(args):
         best_reward = eval_reward
         if args.save_actor is not None:
           torch.save(algo.actor, args.save_actor)
+        
+        if args.save_critic is not None:
+          torch.save(algo.critic, args.save_critic)
 
       if logger is not None:
         logger.add_scalar(args.env_name + '/kl', kl, itr)

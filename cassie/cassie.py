@@ -96,7 +96,9 @@ class CassieEnv_v2:
     self.default_ipos = self.sim.get_body_ipos()
     self.default_fric = self.sim.get_ground_friction()
 
-  def step_simulation(self, action, udp=False):
+    self.critic_state = None
+
+  def step_simulation(self, action):
 
       # maybe make ref traj only send relevant idxs?
       ref_pos, ref_vel = self.get_ref_state(self.phase + self.phase_add)
@@ -127,7 +129,7 @@ class CassieEnv_v2:
 
       self.cassie_state = self.sim.step_pd(self.u)
 
-  def step(self, action):
+  def step(self, action, return_omniscient_state=False):
       for _ in range(self.simrate):
           self.step_simulation(action)
 
@@ -149,9 +151,12 @@ class CassieEnv_v2:
       if reward < 0.3:
           done = True
 
-      return self.get_full_state(), reward, done, {}
+      if return_omniscient_state:
+        return self.get_full_state(), self.get_omniscient_state(), reward, done, {}
+      else:
+        return self.get_full_state(), reward, done, {}
 
-  def reset(self):
+  def reset(self, return_omniscient_state=False):
       self.phase = random.randint(0, self.phaselen)
       self.time = 0
       self.counter = 0
@@ -237,7 +242,13 @@ class CassieEnv_v2:
           self.sim.set_body_ipos(np.clip(com_noise, 0, None))
           self.sim.set_ground_friction(np.clip(fric_noise, 0, None))
 
-      return self.get_full_state()
+      actor_state  = self.get_full_state()
+      critic_state = self.get_omniscient_state()
+
+      if return_omniscient_state:
+        return actor_state, critic_state
+      else:
+        return actor_state
 
   # NOTE: this reward is slightly different from the one in Xie et al
   # see notes for details
@@ -284,10 +295,10 @@ class CassieEnv_v2:
 
           spring_error += 1000 * (target - actual) ** 2      
       
-      reward = 0.10 * np.exp(-joint_error) +       \
+      reward = 0.15 * np.exp(-joint_error) +       \
                0.50 * np.exp(-com_error) +         \
-               0.40 * np.exp(-orientation_error) + \
-               0.00 * np.exp(-spring_error)
+               0.30 * np.exp(-orientation_error) + \
+               0.05 * np.exp(-spring_error)
 
       return reward
 
@@ -370,6 +381,11 @@ class CassieEnv_v2:
           return np.concatenate([robot_state, ext_state])
       else:
           return np.concatenate([qpos[self.pos_index], qvel[self.vel_index], ext_state])
+
+  def get_omniscient_state(self):
+      full_state = self.get_full_state()
+      omniscient_state = np.hstack((full_state, self.sim.get_dof_damping(), self.sim.get_body_mass(), self.sim.get_body_ipos(), self.sim.get_ground_friction))
+      return omniscient_state
 
   def render(self):
       if self.vis is None:

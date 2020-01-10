@@ -176,8 +176,8 @@ class CassieEnv_v2:
       # Randomize dynamics:
       if self.dynamics_randomization:
           damp = self.default_damping
-          weak_factor = 1.4
-          strong_factor = 1.4
+          weak_factor = 1.1
+          strong_factor = 1.1
           pelvis_damp_range = [[damp[0], damp[0]], 
                                [damp[1], damp[1]], 
                                [damp[2], damp[2]], 
@@ -232,15 +232,20 @@ class CassieEnv_v2:
           mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
           mass_noise = [np.random.uniform(a, b) for a, b in mass_range]
 
-          delta = 0.001
+          delta = 0.000
           com_noise = [0, 0, 0] + [self.default_ipos[i] + np.random.uniform(-delta, delta) for i in range(3, len(self.default_ipos))]
 
-          fric_noise = [np.random.uniform(0.5, 1.5)] + [np.random.uniform(1e-3, 1e-2)] + list(self.default_fric[2:])
+          fric_noise = [np.random.uniform(0.5, 1.25)] + [np.random.uniform(1e-3, 1e-2)] + list(self.default_fric[2:])
 
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))
           self.sim.set_body_ipos(np.clip(com_noise, 0, None))
           self.sim.set_ground_friction(np.clip(fric_noise, 0, None))
+      else:
+          self.sim.set_dof_damping(self.default_damping)
+          self.sim.set_body_mass(self.default_mass)
+          self.sim.set_body_ipos(self.default_ipos)
+          self.sim.set_ground_friction(self.default_fric)
 
       actor_state  = self.get_full_state()
       critic_state = self.get_omniscient_state()
@@ -284,8 +289,8 @@ class CassieEnv_v2:
           com_error += (target - actual) ** 2
       
       actual_q = qpos[3:7]
-      target_q = ref_pos[3:7]
-      #target_q = [1, 0, 0, 0]
+      #target_q = ref_pos[3:7]
+      target_q = [1, 0, 0, 0]
       orientation_error = 1 - np.inner(actual_q, target_q) ** 2
 
       # left and right shin springs
@@ -296,9 +301,9 @@ class CassieEnv_v2:
           spring_error += 1000 * (target - actual) ** 2      
       
       reward = 0.15 * np.exp(-joint_error) +       \
-               0.50 * np.exp(-com_error) +         \
+               0.40 * np.exp(-com_error) +         \
                0.30 * np.exp(-orientation_error) + \
-               0.05 * np.exp(-spring_error)
+               0.15 * np.exp(-spring_error)
 
       return reward
 

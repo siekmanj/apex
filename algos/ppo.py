@@ -135,47 +135,48 @@ class PPO_Worker:
       self.actor.welford_state_mean, self.actor.welford_state_mean_diff, self.actor.welford_state_n = input_norm
 
   def collect_experience(self, max_traj_len, min_steps):
-    start = time()
+    with torch.no_grad():
+      start = time()
 
-    num_steps = 0
-    memory = Buffer(self.gamma)
-    actor  = self.actor
-    critic = self.critic
+      num_steps = 0
+      memory = Buffer(self.gamma)
+      actor  = self.actor
+      critic = self.critic
 
-    while num_steps < min_steps:
-      state = torch.Tensor(self.env.reset())
+      while num_steps < min_steps:
+        state = torch.Tensor(self.env.reset())
 
-      done = False
-      value = 0
-      traj_len = 0
+        done = False
+        value = 0
+        traj_len = 0
 
-      if hasattr(actor, 'init_hidden_state'):
-        actor.init_hidden_state()
+        if hasattr(actor, 'init_hidden_state'):
+          actor.init_hidden_state()
 
-      if hasattr(critic, 'init_hidden_state'):
-        critic.init_hidden_state()
+        if hasattr(critic, 'init_hidden_state'):
+          critic.init_hidden_state()
 
-      while not done and traj_len < max_traj_len:
-          state = torch.Tensor(state)
-          norm_state = actor.normalize_state(state, update=False)
-          action = actor(norm_state, False)
-          value = critic(norm_state)
+        while not done and traj_len < max_traj_len:
+            state = torch.Tensor(state)
+            norm_state = actor.normalize_state(state, update=False)
+            action = actor(norm_state, False)
+            value = critic(norm_state)
 
-          next_state, reward, done, _ = self.env.step(action.numpy())
+            next_state, reward, done, _ = self.env.step(action.numpy())
 
-          reward = np.array([reward])
+            reward = np.array([reward])
 
-          memory.push(state.numpy(), action.numpy(), reward, value.numpy())
+            memory.push(state.numpy(), action.numpy(), reward, value.numpy())
 
-          state = next_state
+            state = next_state
 
-          traj_len += 1
-          num_steps += 1
+            traj_len += 1
+            num_steps += 1
 
-      value = (not done) * critic(torch.Tensor(state)).numpy()
-      memory.end_trajectory(terminal_value=value)
+        value = (not done) * critic(torch.Tensor(state)).numpy()
+        memory.end_trajectory(terminal_value=value)
 
-    return memory
+      return memory
 
 class PPO:
     def __init__(self, actor, critic, env_fn, args):

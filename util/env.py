@@ -45,6 +45,7 @@ def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=Fal
       print("\tclock based:            {}".format(clock_based))
       return partial(CassieEnv_v2, 'walking', clock_based=clock_based, state_est=state_est, no_delta=no_delta, dynamics_randomization=dynamics_randomization)
 
+    import os
     print("ATTEMPTING TO IMPORT GYM. CONTENTS OF LD_LIBRARY_PATH:")
     if 'LD_LIBRARY_PATH' not in os.environ: # Ray is finicky about environment variables
       print("NOT PRESENT!!!! ADDING IT NOW!")

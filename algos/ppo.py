@@ -1,5 +1,10 @@
 """Proximal Policy Optimization (clip objective)."""
 from copy import deepcopy
+import os
+
+if 'LD_LIBRARY_PATH' not in os.environ:
+  os.environ["LD_LIBRARY_PATH"] = "/home/drl/.mujoco/mujoco200/bin"
+  os.environ["MUJOCO_KEY_PATH"] = "/home/drl/.mujoco/mjkey.txt"
 
 import torch
 import torch.nn as nn
@@ -13,7 +18,6 @@ from torch.nn.utils.rnn import pad_sequence
 from time import time
 
 import numpy as np
-import os
 
 import ray
 

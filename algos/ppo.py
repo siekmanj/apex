@@ -130,8 +130,12 @@ class PPO_Worker:
     self.critic = deepcopy(critic)
     if 'LD_LIBRARY_PATH' not in os.environ: # Ray is finicky about environment variables
       print("ADDING ENV VARIABLE TWO !")
-      os.environ["LD_LIBRARY_PATH"] = "/home/drl/.mujoco/mujoco200/bin"
-      os.environ["MUJOCO_KEY_PATH"] = "/home/drl/.mujoco/mjkey.txt"
+      os.environ["LD_LIBRARY_PATH"] = "/home/drl/.mujoco/mujoco200/bin:"
+      os.environ["MUJOCO_KEY_PATH"] = "/home/drl/.mujoco/mjkey.txt:"
+    else:
+      print("ADDING ENV VARIABLE TWO !")
+      os.environ["LD_LIBRARY_PATH"] += ":/home/drl/.mujoco/mujoco200/bin"
+      os.environ["MUJOCO_KEY_PATH"] += ":/home/drl/.mujoco/mjkey.txt"
 
   def update_policy(self, new_actor_params, new_critic_params, input_norm=None):
     for p, new_p in zip(self.actor.parameters(), new_actor_params):

@@ -1,6 +1,12 @@
+import os
+
+if 'LD_LIBRARY_PATH' not in os.environ: # Ray is finicky about environment variables
+  print("ADDING ENV VARIABLE THREEE!")
+  os.environ["LD_LIBRARY_PATH"] = "/home/drl/.mujoco/mujoco200/bin"
+  os.environ["MUJOCO_KEY_PATH"] = "/home/drl/.mujoco/mjkey.txt"
 import gym
 import torch
-import hashlib, os
+import hashlib
 from collections import OrderedDict
 
 from util.env import env_factory, eval_policy

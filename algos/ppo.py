@@ -2,10 +2,12 @@
 from copy import deepcopy
 import os
 
+"""
 if 'LD_LIBRARY_PATH' not in os.environ: # Ray is finicky about environment variables
   print("ADDING ENV VARIABLE ONE !")
   os.environ["LD_LIBRARY_PATH"] = "/home/drl/.mujoco/mujoco200/bin"
   os.environ["MUJOCO_KEY_PATH"] = "/home/drl/.mujoco/mjkey.txt"
+"""
 
 import torch
 import torch.nn as nn
@@ -128,6 +130,7 @@ class PPO_Worker:
     self.gamma = gamma
     self.actor = deepcopy(actor)
     self.critic = deepcopy(critic)
+    """
     if 'LD_LIBRARY_PATH' not in os.environ: # Ray is finicky about environment variables
       print("ADDING ENV VARIABLE TWO !")
       os.environ["LD_LIBRARY_PATH"] = "/home/drl/.mujoco/mujoco200/bin:"
@@ -136,6 +139,7 @@ class PPO_Worker:
       print("ADDING ENV VARIABLE TWO !")
       os.environ["LD_LIBRARY_PATH"] += ":/home/drl/.mujoco/mujoco200/bin"
       os.environ["MUJOCO_KEY_PATH"] += ":/home/drl/.mujoco/mjkey.txt"
+    """
 
   def update_policy(self, new_actor_params, new_critic_params, input_norm=None):
     for p, new_p in zip(self.actor.parameters(), new_actor_params):

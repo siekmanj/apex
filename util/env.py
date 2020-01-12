@@ -1,6 +1,5 @@
 import time 
 import torch
-import gym
 
 def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=False, **kwargs):
     from functools import partial
@@ -46,6 +45,14 @@ def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=Fal
       print("\tclock based:            {}".format(clock_based))
       return partial(CassieEnv_v2, 'walking', clock_based=clock_based, state_est=state_est, no_delta=no_delta, dynamics_randomization=dynamics_randomization)
 
+    print("ATTEMPTING TO IMPORT GYM. CONTENTS OF LD_LIBRARY_PATH:")
+    if 'LD_LIBRARY_PATH' not in os.environ: # Ray is finicky about environment variables
+      print("NOT PRESENT!!!! ADDING IT NOW!")
+      os.environ["LD_LIBRARY_PATH"] = "/home/drl/.mujoco/mujoco200/bin"
+      os.environ["MUJOCO_KEY_PATH"] = "/home/drl/.mujoco/mjkey.txt"
+    print(os.environ["LD_LIBRARY_PATH"])
+
+    import gym
     spec = gym.envs.registry.spec(path)
     _kwargs = spec._kwargs.copy()
     _kwargs.update(kwargs)

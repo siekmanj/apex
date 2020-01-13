@@ -235,7 +235,7 @@ class CassieEnv_v2:
           delta = 0.000
           com_noise = [0, 0, 0] + [self.default_ipos[i] + np.random.uniform(-delta, delta) for i in range(3, len(self.default_ipos))]
 
-          fric_noise = [np.random.uniform(0.5, 1.25)] + [np.random.uniform(1e-3, 1e-2)] + list(self.default_fric[2:])
+          fric_noise = [np.random.uniform(0.6, 1.2)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
 
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))
@@ -286,12 +286,12 @@ class CassieEnv_v2:
 
           # NOTE: in Xie et al y target is 0
 
-          com_error += (target - actual) ** 2
+          com_error += 10 * (target - actual) ** 2
       
       actual_q = qpos[3:7]
       #target_q = ref_pos[3:7]
       target_q = [1, 0, 0, 0]
-      orientation_error = 1 - np.inner(actual_q, target_q) ** 2
+      orientation_error = 10 * (1 - np.inner(actual_q, target_q) ** 2)
 
       # left and right shin springs
       for i in [15, 29]:
@@ -300,10 +300,10 @@ class CassieEnv_v2:
 
           spring_error += 1000 * (target - actual) ** 2      
       
-      reward = 0.15 * np.exp(-joint_error) +       \
-               0.40 * np.exp(-com_error) +         \
-               0.30 * np.exp(-orientation_error) + \
-               0.15 * np.exp(-spring_error)
+      reward = 0.125 * np.exp(-joint_error) +       \
+               0.450 * np.exp(-com_error) +         \
+               0.300 * np.exp(-orientation_error) + \
+               0.125 * np.exp(-spring_error)
 
       return reward
 

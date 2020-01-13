@@ -1,6 +1,5 @@
 import os
 
-import gym
 import torch
 import hashlib
 from collections import OrderedDict

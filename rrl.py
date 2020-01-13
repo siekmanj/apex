@@ -1,6 +1,7 @@
-import gym
+import os
+
 import torch
-import hashlib, os
+import hashlib
 from collections import OrderedDict
 
 from util.env import env_factory, eval_policy

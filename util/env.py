@@ -1,6 +1,5 @@
 import time 
 import torch
-import gym
 
 def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=False, **kwargs):
     from functools import partial
@@ -46,6 +45,7 @@ def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=Fal
       print("\tclock based:            {}".format(clock_based))
       return partial(CassieEnv_v2, 'walking', clock_based=clock_based, state_est=state_est, no_delta=no_delta, dynamics_randomization=dynamics_randomization)
 
+    import gym
     spec = gym.envs.registry.spec(path)
     _kwargs = spec._kwargs.copy()
     _kwargs.update(kwargs)

@@ -291,7 +291,7 @@ class CassieEnv_v2:
       actual_q = qpos[3:7]
       #target_q = ref_pos[3:7]
       target_q = [1, 0, 0, 0]
-      orientation_error = 10 * (1 - np.inner(actual_q, target_q) ** 2)
+      orientation_error = 5 * (1 - np.inner(actual_q, target_q) ** 2)
 
       # left and right shin springs
       for i in [15, 29]:

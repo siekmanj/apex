@@ -1,6 +1,7 @@
-import gym
+import os
+
 import torch
-import hashlib, os
+import hashlib
 from collections import OrderedDict
 
 from util.env import env_factory, eval_policy
@@ -168,6 +169,40 @@ if __name__ == "__main__":
     parser.add_argument("--eps",            "-ep",  default=1e-5,          type=float)    # adam eps
     parser.add_argument("--kl",                     default=0.02,          type=float)    # kl abort threshold
     parser.add_argument("--entropy_coeff",          default=0.0,           type=float)
+    parser.add_argument("--grad_clip",              default=0.05,          type=float)
+    parser.add_argument("--batch_size",             default=64,            type=int)      # batch size for policy update
+    parser.add_argument("--epochs",                 default=3,             type=int)      # number of updates per iter
+
+    parser.add_argument("--save_actor",             default=None,          type=str)
+    parser.add_argument("--save_critic",            default=None,          type=str)
+    parser.add_argument("--logdir",                 default="./logs/ppo/", type=str)
+    parser.add_argument("--workers",                default=4,             type=int)
+    parser.add_argument("--redis",                  default=None,          type=str)
+    args = parser.parse_args()
+
+    run_experiment(args)
+
+  elif sys.argv[1] == 'sac':
+    sys.argv.remove(sys.argv[1])
+    """
+      Utility for running Soft Actor-Critic.
+
+    """
+    from algos.sac import run_experiment
+    parser.add_argument("--seed",                   default=0,             type=int)      # number of timesteps to run experiment for
+    parser.add_argument("--timesteps",       "-t",  default=1e6,           type=float)      # number of timesteps to run experiment for
+    parser.add_argument("--env_name",               default='Cassie-v0',   type=str)
+    parser.add_argument("--traj_len",       "-tl",  default=400,           type=int)      # max trajectory length for environment
+    parser.add_argument("--start_timesteps",        default=10000,         type=int)      
+    parser.add_argument("--eval_every",             default=10,             type=int) 
+    #parser.add_argument("--prenormalize_steps",     default=10000,         type=int)      
+    #parser.add_argument("--num_steps",              default=5000,          type=int)      
+    parser.add_argument("--recurrent",              action='store_true')
+
+    parser.add_argument('--discount',               default=0.99,          type=float)    # the discount factor
+    parser.add_argument('--tau',                    default=0.13,          type=float)
+    parser.add_argument("--a_lr",           "-alr", default=1e-4,          type=float)    # adam learning rate for actor
+    parser.add_argument("--c_lr",           "-clr", default=1e-4,          type=float)    # adam learning rate for critic
     parser.add_argument("--grad_clip",              default=0.05,          type=float)
     parser.add_argument("--batch_size",             default=64,            type=int)      # batch size for policy update
     parser.add_argument("--epochs",                 default=3,             type=int)      # number of updates per iter

@@ -13,11 +13,12 @@ import random
 import pickle
 
 class CassieEnv_v2:
-  def __init__(self, traj='walking', simrate=60, clock_based=False, state_est=False, dynamics_randomization=False, no_delta=False, ik_traj=None):
+  def __init__(self, traj='walking', simrate=60, clock=True, state_est=False, dynamics_randomization=False, no_delta=False, ik_traj=None):
+    print("CLOCK:", clock)
     self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
     self.vis = None
 
-    self.clock_based = clock_based
+    self.clock = clock
     self.state_est = state_est
     self.no_delta = no_delta
     self.dynamics_randomization = dynamics_randomization
@@ -30,16 +31,21 @@ class CassieEnv_v2:
 
     speed_size     = 1
 
-    if clock_based:
+    if clock:
         if self.state_est:
-            self.observation_space = np.zeros(state_est_size + clock_size + speed_size)
+          self.observation_space = np.zeros(state_est_size + clock_size + speed_size)
         else:
           self.observation_space = np.zeros(mjstate_size + clock_size + speed_size)
     else:
         if self.state_est:
-          self.observation_space = np.zeros(state_est_size + ref_traj_size)
+            self.observation_space = np.zeros(state_est_size + speed_size)
         else:
-          self.observation_space = np.zeros(mjstate_size + ref_traj_size)
+          self.observation_space = np.zeros(mjstate_size + speed_size)
+    #else:
+    #    if self.state_est:
+    #      self.observation_space = np.zeros(state_est_size + ref_traj_size)
+    #    else:
+    #      self.observation_space = np.zeros(mjstate_size + ref_traj_size)
 
     self.action_space = np.zeros(10)
 
@@ -95,8 +101,13 @@ class CassieEnv_v2:
     self.default_mass = self.sim.get_body_mass()
     self.default_ipos = self.sim.get_body_ipos()
     self.default_fric = self.sim.get_ground_friction()
+    self.default_rgba = self.sim.get_geom_rgba()
 
     self.critic_state = None
+
+    # This randomizes the colors of the various geoms on Cassie.
+    #colors = np.hstack([self.default_rgba[:4], [np.random.uniform(0, 1) for i in range(4, self.sim.ngeom * 4)]])
+    #self.sim.set_geom_rgba(colors)
 
   def step_simulation(self, action):
 
@@ -166,18 +177,11 @@ class CassieEnv_v2:
       self.sim.set_qpos(qpos)
       self.sim.set_qvel(qvel)
 
-      # Need to reset u? Or better way to reset cassie_state than taking step
-      self.cassie_state = self.sim.step_pd(self.u)
-
-      self.speed = (random.randint(0, 10)) / 10
-      # maybe make ref traj only send relevant idxs?
-      ref_pos, ref_vel = self.get_ref_state(self.phase)
-
       # Randomize dynamics:
       if self.dynamics_randomization:
           damp = self.default_damping
-          weak_factor = 1.1
-          strong_factor = 1.1
+          weak_factor = 0.5
+          strong_factor = 1.5
           pelvis_damp_range = [[damp[0], damp[0]], 
                                [damp[1], damp[1]], 
                                [damp[2], damp[2]], 
@@ -185,28 +189,28 @@ class CassieEnv_v2:
                                [damp[4], damp[4]], 
                                [damp[5], damp[5]]]                 # 0->5
 
-          hip_damp_range = [[damp[6]/weak_factor, damp[6]*weak_factor],
-                            [damp[7]/weak_factor, damp[7]*weak_factor],
-                            [damp[8]/weak_factor, damp[8]*weak_factor]]  # 6->8 and 19->21
+          hip_damp_range = [[damp[6]*weak_factor, damp[6]*strong_factor],
+                            [damp[7]*weak_factor, damp[7]*strong_factor],
+                            [damp[8]*weak_factor, damp[8]*strong_factor]]  # 6->8 and 19->21
 
-          achilles_damp_range = [[damp[9]/weak_factor,  damp[9]*weak_factor],
-                                 [damp[10]/weak_factor, damp[10]*weak_factor], 
-                                 [damp[11]/weak_factor, damp[11]*weak_factor]] # 9->11 and 22->24
+          achilles_damp_range = [[damp[9]*weak_factor,  damp[9]*strong_factor],
+                                 [damp[10]*weak_factor, damp[10]*strong_factor], 
+                                 [damp[11]*weak_factor, damp[11]*strong_factor]] # 9->11 and 22->24
 
-          knee_damp_range     = [[damp[12]/weak_factor, damp[12]*weak_factor]]   # 12 and 25
-          shin_damp_range     = [[damp[13]/weak_factor, damp[13]*weak_factor]]   # 13 and 26
-          tarsus_damp_range   = [[damp[14], damp[14]*strong_factor]]             # 14 and 27
+          knee_damp_range     = [[damp[12]*weak_factor, damp[12]*strong_factor]]   # 12 and 25
+          shin_damp_range     = [[damp[13]*weak_factor, damp[13]*strong_factor]]   # 13 and 26
+          tarsus_damp_range   = [[damp[14], damp[14]]]             # 14 and 27
           heel_damp_range     = [[damp[15], damp[15]]]                           # 15 and 28
-          fcrank_damp_range   = [[damp[16]/weak_factor, damp[16]*weak_factor]]   # 16 and 29
+          fcrank_damp_range   = [[damp[16]*weak_factor, damp[16]*strong_factor]]   # 16 and 29
           prod_damp_range     = [[damp[17], damp[17]]]                           # 17 and 30
-          foot_damp_range     = [[damp[18]/weak_factor, damp[18]*weak_factor]]   # 18 and 31
+          foot_damp_range     = [[damp[18]*weak_factor, damp[18]*strong_factor]]   # 18 and 31
 
           side_damp = hip_damp_range + achilles_damp_range + knee_damp_range + shin_damp_range + tarsus_damp_range + heel_damp_range + fcrank_damp_range + prod_damp_range + foot_damp_range
           damp_range = pelvis_damp_range + side_damp + side_damp
           damp_noise = [np.random.uniform(a, b) for a, b in damp_range]
 
-          hi = 1.1
-          lo = 0.9
+          hi = 1.3
+          lo = 0.7
           m = self.default_mass
           pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
           hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16
@@ -232,20 +236,32 @@ class CassieEnv_v2:
           mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
           mass_noise = [np.random.uniform(a, b) for a, b in mass_range]
 
-          delta = 0.000
-          com_noise = [0, 0, 0] + [self.default_ipos[i] + np.random.uniform(-delta, delta) for i in range(3, len(self.default_ipos))]
+          delta_y_min, delta_y_max = self.default_ipos[4] - 0.07, self.default_ipos[4] + 0.07
+          delta_z_min, delta_z_max = self.default_ipos[5] - 0.04, self.default_ipos[5] + 0.04
+          com_noise = [0, 0, 0] + [np.random.uniform(-0.25, 0.06)] + [np.random.uniform(delta_y_min, delta_y_max)] + [np.random.uniform(delta_z_min, delta_z_max)] + list(self.default_ipos[6:])
 
-          fric_noise = [np.random.uniform(0.5, 1.25)] + [np.random.uniform(1e-3, 1e-2)] + list(self.default_fric[2:])
+          fric_noise = [np.random.uniform(0.4, 1.4)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
 
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))
-          self.sim.set_body_ipos(np.clip(com_noise, 0, None))
+          self.sim.set_body_ipos(com_noise)
           self.sim.set_ground_friction(np.clip(fric_noise, 0, None))
       else:
           self.sim.set_dof_damping(self.default_damping)
           self.sim.set_body_mass(self.default_mass)
           self.sim.set_body_ipos(self.default_ipos)
           self.sim.set_ground_friction(self.default_fric)
+
+
+      self.sim.set_const()
+
+      # Need to reset u? Or better way to reset cassie_state than taking step
+      self.cassie_state = self.sim.step_pd(self.u)
+
+      #self.speed = (random.randint(0, 10)) / 10
+      self.speed = np.random.uniform(-0.15, 0.8)
+      # maybe make ref traj only send relevant idxs?
+      ref_pos, ref_vel = self.get_ref_state(self.phase)
 
       actor_state  = self.get_full_state()
       critic_state = self.get_omniscient_state()
@@ -279,6 +295,7 @@ class CassieEnv_v2:
 
           joint_error += 30 * weight[i] * (target - actual) ** 2
 
+      """
       # center of mass: x, y, z
       for j in [0, 1, 2]:
           target = ref_pos[j]
@@ -286,12 +303,25 @@ class CassieEnv_v2:
 
           # NOTE: in Xie et al y target is 0
 
-          com_error += (target - actual) ** 2
-      
+          com_error += 10 * (target - actual) ** 2
+      """
+
+      forward_diff = np.abs(qvel[0] - self.speed)
+      if forward_diff < 0.05:
+         forward_diff = 0
+
+      y_vel = np.abs(qvel[1])
+      if y_vel < 0.03:
+        y_vel = 0
+
+      straight_diff = np.abs(qpos[1])
+      if straight_diff < 0.05:
+        straight_diff = 0
+
       actual_q = qpos[3:7]
       #target_q = ref_pos[3:7]
       target_q = [1, 0, 0, 0]
-      orientation_error = 1 - np.inner(actual_q, target_q) ** 2
+      orientation_error = 5 * (1 - np.inner(actual_q, target_q) ** 2)
 
       # left and right shin springs
       for i in [15, 29]:
@@ -300,10 +330,13 @@ class CassieEnv_v2:
 
           spring_error += 1000 * (target - actual) ** 2      
       
-      reward = 0.15 * np.exp(-joint_error) +       \
-               0.40 * np.exp(-com_error) +         \
-               0.30 * np.exp(-orientation_error) + \
-               0.15 * np.exp(-spring_error)
+      reward = 0.200 * np.exp(-joint_error) +       \
+               0.200 * np.exp(-forward_diff) +      \
+               0.050 * np.exp(-straight_diff) +     \
+               0.200 * np.exp(-y_vel) +             \
+               0.300 * np.exp(-orientation_error) + \
+               0.050 * np.exp(-spring_error)
+               #0.450 * np.exp(-com_error) +         \
 
       return reward
 
@@ -357,14 +390,14 @@ class CassieEnv_v2:
       # trajectory despite being global coord. Y is only invariant to straight
       # line trajectories.
 
-      if self.clock_based:
+      if self.clock:
         clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
                  np.cos(2 * np.pi *  self.phase / self.phaselen)]
         
         ext_state = np.concatenate((clock, [self.speed]))
 
       else:
-        ext_state = np.concatenate([ref_pos[self.pos_index], ref_vel[self.vel_index]])
+        ext_state = [self.speed]
 
       # Use state estimator
       robot_state = np.concatenate([

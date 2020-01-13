@@ -93,7 +93,7 @@ def run_udp(args):
   from util.env import env_factory
 
   policy = torch.load(args.policy)
-  policy.eval()
+  #policy.eval()
 
   env = env_factory(policy.env_name)()
   if not env.state_est:
@@ -162,7 +162,7 @@ def run_udp(args):
   phase_add = 1
   speed = 0
 
-  max_speed = 5
+  max_speed = 2
   min_speed = -1
   max_y_speed = 0.0
   min_y_speed = 0.0
@@ -212,6 +212,10 @@ def run_udp(args):
         else:
             sto = False
 
+        if state.radio.channel[15] < 0 and hasattr(policy, 'init_hidden_state'):
+            print("(TOGGLE SWITCH) RESETTING HIDDEN STATES TO ZERO!")
+            policy.init_hidden_state()
+
         # Switch the operation mode based on the toggle next to STO
         if state.radio.channel[9] < -0.5: # towards operator means damping shutdown mode
             operation_mode = 2
@@ -226,7 +230,7 @@ def run_udp(args):
         speed = max(min_speed, state.radio.channel[0] * curr_max + speed_add)
         speed = min(max_speed, state.radio.channel[0] * curr_max + speed_add)
 
-        print('\t' + str(state.radio.channel[5]))
+        #print('\t' + str(state.radio.channel[5]))
         phase_add = 1 # + state.radio.channel[5]
       else:
         # Automatically change orientation and speed
@@ -288,7 +292,7 @@ def run_udp(args):
           RL_state = np.concatenate([robot_state, ext_state])
           
           #pretending the height is always 1.0
-          RL_state[0] = 1.0
+          #RL_state[0] = 1.0
           
           # Construct input vector
           torch_state = torch.Tensor(RL_state)
@@ -357,9 +361,8 @@ def run_udp(args):
       # Measure delay
       # Wait until next cycle time
       while time.monotonic() - t < 60/2000:
-          print("LOOP TIME {} of {}!".format(time.monotonic() - t, 60/2000))
           time.sleep(0.001)
-      print('delay: {:6.1f} ms'.format((time.monotonic() - t) * 1000))
+      print('\tdelay: {:6.1f} ms'.format((time.monotonic() - t) * 1000))
 
       # Track phase
       phase += phase_add

@@ -433,3 +433,4 @@ def run_experiment(args):
         logger.add_scalar(args.env_name + '/actor_loss', a_loss, itr)
         logger.add_scalar(args.env_name + '/critic_loss', c_loss, itr)
       itr += 1
+    print("Finished ({} of {}).".format(timesteps, args.timesteps))

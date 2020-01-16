@@ -265,7 +265,7 @@ class PPO:
       critic_param_id = ray.put(list(self.critic.parameters()))
       norm_id = ray.put([self.actor.welford_state_mean, self.actor.welford_state_mean_diff, self.actor.welford_state_n])
 
-      steps = num_steps // len(self.workers)
+      steps = max(num_steps // len(self.workers), max_traj_len)
 
       for w in self.workers:
         w.update_policy.remote(actor_param_id, critic_param_id, input_norm=norm_id)

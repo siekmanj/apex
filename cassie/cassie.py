@@ -166,13 +166,6 @@ class CassieEnv_v2:
       self.sim.set_qpos(qpos)
       self.sim.set_qvel(qvel)
 
-      # Need to reset u? Or better way to reset cassie_state than taking step
-      self.cassie_state = self.sim.step_pd(self.u)
-
-      self.speed = (random.randint(0, 10)) / 10
-      # maybe make ref traj only send relevant idxs?
-      ref_pos, ref_vel = self.get_ref_state(self.phase)
-
       # Randomize dynamics:
       if self.dynamics_randomization:
           damp = self.default_damping
@@ -246,6 +239,16 @@ class CassieEnv_v2:
           self.sim.set_body_mass(self.default_mass)
           self.sim.set_body_ipos(self.default_ipos)
           self.sim.set_ground_friction(self.default_fric)
+
+
+      self.sim.set_const()
+
+      # Need to reset u? Or better way to reset cassie_state than taking step
+      self.cassie_state = self.sim.step_pd(self.u)
+
+      self.speed = (random.randint(0, 10)) / 10
+      # maybe make ref traj only send relevant idxs?
+      ref_pos, ref_vel = self.get_ref_state(self.phase)
 
       actor_state  = self.get_full_state()
       critic_state = self.get_omniscient_state()

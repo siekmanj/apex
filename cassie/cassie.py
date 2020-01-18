@@ -280,7 +280,7 @@ class CassieEnv_v2:
           target = ref_pos[j]
           actual = qpos[j]
 
-          joint_error += 30 * weight[i] * (target - actual) ** 2
+          joint_error += 20 * weight[i] * (target - actual) ** 2
 
       """
       # center of mass: x, y, z
@@ -318,9 +318,12 @@ class CassieEnv_v2:
           spring_error += 1000 * (target - actual) ** 2      
       
       reward = 0.200 * np.exp(-joint_error) +       \
-               0.450 * np.exp(-com_error) +         \
+               0.200 * np.exp(-forward_diff) +      \
+               0.100 * np.exp(-straight_diff) +     \
+               0.150 * np.exp(-y_vel) +             \
                0.300 * np.exp(-orientation_error) + \
                0.050 * np.exp(-spring_error)
+               #0.450 * np.exp(-com_error) +         \
 
       return reward
 

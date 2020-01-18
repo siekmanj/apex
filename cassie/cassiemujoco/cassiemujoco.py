@@ -30,6 +30,7 @@ class CassieSim:
         self.nv = 32
         self.nbody = 26
         self.nq = 35
+        self.ngeom = 35
 
     def step(self, u):
         y = cassie_out_t()
@@ -138,6 +139,13 @@ class CassieSim:
           ret[i] = ptr[i]
         return ret
 
+    def get_geom_rgba(self):
+        ptr = cassie_sim_geom_rgba(self.c)
+        ret = np.zeros(self.ngeom * 4)
+        for i in range(self.ngeom * 4):
+          ret[i] = ptr[i]
+        return ret
+
     def set_dof_damping(self, data):
         c_arr = (ctypes.c_double * self.nv)()
 
@@ -186,6 +194,20 @@ class CassieSim:
           c_arr[i] = data[i]
 
         cassie_sim_set_ground_friction(self.c, c_arr)
+
+    def set_geom_rgba(self, data):
+        ngeom = self.ngeom * 4
+
+        if len(data) != ngeom:
+           print("SIZE MISMATCH SET_GEOM_RGBA()")
+           exit(1)
+
+        c_arr = (ctypes.c_float * ngeom)()
+
+        for i in range(ngeom):
+          c_arr[i] = data[i]
+
+        cassie_sim_set_geom_rgba(self.c, c_arr)
     
     def set_const(self):
         cassie_sim_set_const(self.c)
@@ -195,9 +217,7 @@ class CassieSim:
 
 class CassieVis:
     def __init__(self, c, modelfile):
-        print("making cassievis")
         self.v = cassie_vis_init(c.c, modelfile.encode('utf-8'))
-        print("made cassievis python")
 
     def draw(self, c):
         state = cassie_vis_draw(self.v, c.c)

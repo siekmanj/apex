@@ -280,8 +280,9 @@ class CassieEnv_v2:
           target = ref_pos[j]
           actual = qpos[j]
 
-          joint_error += 50 * weight[i] * (target - actual) ** 2
+          joint_error += 30 * weight[i] * (target - actual) ** 2
 
+      """
       # center of mass: x, y, z
       for j in [0, 1, 2]:
           target = ref_pos[j]
@@ -290,10 +291,23 @@ class CassieEnv_v2:
           # NOTE: in Xie et al y target is 0
 
           com_error += 10 * (target - actual) ** 2
-      
+      """
+
+      forward_diff = np.abs(qvel[0] - self.speed)
+      if forward_diff < 0.05:
+         forward_diff = 0
+
+      y_vel = np.abs(qvel[1])
+      if y_vel < 0.03:
+        y_vel = 0
+
+      straight_diff = np.abs(qpos[1])
+      if straight_diff < 0.05:
+        straight_diff = 0
+
       actual_q = qpos[3:7]
-      target_q = ref_pos[3:7]
-      #target_q = [1, 0, 0, 0]
+      #target_q = ref_pos[3:7]
+      target_q = [1, 0, 0, 0]
       orientation_error = 5 * (1 - np.inner(actual_q, target_q) ** 2)
 
       # left and right shin springs

@@ -93,7 +93,7 @@ def run_udp(args):
   from util.env import env_factory
 
   policy = torch.load(args.policy)
-  policy.eval()
+  #policy.eval()
 
   env = env_factory(policy.env_name)()
   if not env.state_est:

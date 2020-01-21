@@ -319,8 +319,8 @@ class CassieEnv_v2:
       
       reward = 0.200 * np.exp(-joint_error) +       \
                0.200 * np.exp(-forward_diff) +      \
-               0.100 * np.exp(-straight_diff) +     \
-               0.150 * np.exp(-y_vel) +             \
+               0.050 * np.exp(-straight_diff) +     \
+               0.200 * np.exp(-y_vel) +             \
                0.300 * np.exp(-orientation_error) + \
                0.050 * np.exp(-spring_error)
                #0.450 * np.exp(-com_error) +         \

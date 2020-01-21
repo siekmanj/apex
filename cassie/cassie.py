@@ -100,8 +100,8 @@ class CassieEnv_v2:
     self.critic_state = None
 
     # This randomizes the colors of the various geoms on Cassie.
-    colors = np.hstack([self.default_rgba[:4], [np.random.uniform(0, 1) for i in range(4, self.sim.ngeom * 4)]])
-    self.sim.set_geom_rgba(colors)
+    #colors = np.hstack([self.default_rgba[:4], [np.random.uniform(0, 1) for i in range(4, self.sim.ngeom * 4)]])
+    #self.sim.set_geom_rgba(colors)
 
   def step_simulation(self, action):
 

@@ -5,9 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 import random
 
-from algos.dpg import eval_policy, collect_experience
-
-from algos.dpg import ReplayBuffer
+from algos.dpg import eval_policy, collect_experience, ReplayBuffer
 
 class TD3():
   def __init__(self, actor, q1, q2, a_lr, c_lr, discount=0.99, tau=0.001, center_reward=False, policy_noise=0.2, update_freq=2, noise_clip=0.5, normalize=False):

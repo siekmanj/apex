@@ -108,15 +108,19 @@ class FF_Stochastic_Actor(Actor):
 
     return mu, sd
 
-  def forward(self, state, deterministic=True):
+  def forward(self, state, deterministic=True, return_log_probs=False):
     mu, sd = self._get_dist_params(state)
 
-    if not deterministic:
-      self.action = torch.distributions.Normal(mu, sd).sample()
-    else:
-      self.action = mu
+    if not deterministic or return_log_probs:
+      dist = torch.distributions.Normal(mu, sd)
+      sample = dist.sample()
 
-    return self.action
+    self.action = mu if deterministic else sample
+
+    if return_log_probs:
+      return self.action, dist.log_prob(sample)
+    else:
+      return self.action
 
   def pdf(self, state):
     mu, sd = self._get_dist_params(state)
@@ -240,7 +244,6 @@ class LSTM_Stochastic_Actor(Actor):
           c, h = self.cells[idx], self.hidden[idx]
           self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
           x_t = self.hidden[idx]
-        #x_t = self.nonlinearity(self.network_out(x_t))
         x_t = self.network_out(x_t)
         action.append(x_t)
 
@@ -272,15 +275,19 @@ class LSTM_Stochastic_Actor(Actor):
     self.hidden = [torch.zeros(batch_size, l.hidden_size) for l in self.actor_layers]
     self.cells  = [torch.zeros(batch_size, l.hidden_size) for l in self.actor_layers]
 
-  def forward(self, state, deterministic=True):
+  def forward(self, state, deterministic=True, return_log_probs=False):
     mu, sd = self._get_dist_params(state)
 
-    if not deterministic:
-      self.action = torch.distributions.Normal(mu, sd).sample()
-    else:
-      self.action = mu
+    if not deterministic or return_log_probs:
+      dist = torch.distributions.Normal(mu, sd)
+      sample = dist.sample()
 
-    return self.action
+    self.action = mu if deterministic else sample
+
+    if return_log_probs:
+      return self.action, dist.log_prob(sample)
+    else:
+      return self.action
 
   def pdf(self, state):
     mu, sd = self._get_dist_params(state)

@@ -162,7 +162,7 @@ def run_udp(args):
   phase_add = 1
   speed = 0
 
-  max_speed = 5
+  max_speed = 2
   min_speed = -1
   max_y_speed = 0.0
   min_y_speed = 0.0
@@ -212,7 +212,7 @@ def run_udp(args):
         else:
             sto = False
 
-        if state.radio.channel[16] < 0 and hasattr(policy, 'init_hidden_state'):
+        if state.radio.channel[15] < 0 and hasattr(policy, 'init_hidden_state'):
             print("(TOGGLE SWITCH) RESETTING HIDDEN STATES TO ZERO!")
             policy.init_hidden_state()
 

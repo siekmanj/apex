@@ -95,8 +95,13 @@ class CassieEnv_v2:
     self.default_mass = self.sim.get_body_mass()
     self.default_ipos = self.sim.get_body_ipos()
     self.default_fric = self.sim.get_ground_friction()
+    self.default_rgba = self.sim.get_geom_rgba()
 
     self.critic_state = None
+
+    # This randomizes the colors of the various geoms on Cassie.
+    #colors = np.hstack([self.default_rgba[:4], [np.random.uniform(0, 1) for i in range(4, self.sim.ngeom * 4)]])
+    #self.sim.set_geom_rgba(colors)
 
   def step_simulation(self, action):
 

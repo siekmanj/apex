@@ -162,7 +162,7 @@ def run_udp(args):
   phase_add = 1
   speed = 0
 
-  max_speed = 5
+  max_speed = 2
   min_speed = -1
   max_y_speed = 0.0
   min_y_speed = 0.0

@@ -212,7 +212,7 @@ def run_udp(args):
         else:
             sto = False
 
-        if state.radio.channel[16] < 0 and hasattr(policy, 'init_hidden_state'):
+        if state.radio.channel[15] < 0 and hasattr(policy, 'init_hidden_state'):
             print("(TOGGLE SWITCH) RESETTING HIDDEN STATES TO ZERO!")
             policy.init_hidden_state()
 

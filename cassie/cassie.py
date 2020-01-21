@@ -174,8 +174,8 @@ class CassieEnv_v2:
       # Randomize dynamics:
       if self.dynamics_randomization:
           damp = self.default_damping
-          weak_factor = 1.1
-          strong_factor = 1.1
+          weak_factor = 2.0
+          strong_factor = 1.5
           pelvis_damp_range = [[damp[0], damp[0]], 
                                [damp[1], damp[1]], 
                                [damp[2], damp[2]], 
@@ -203,8 +203,8 @@ class CassieEnv_v2:
           damp_range = pelvis_damp_range + side_damp + side_damp
           damp_noise = [np.random.uniform(a, b) for a, b in damp_range]
 
-          hi = 1.1
-          lo = 0.9
+          hi = 1.5
+          lo = 0.5
           m = self.default_mass
           pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
           hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16
@@ -233,7 +233,7 @@ class CassieEnv_v2:
           delta = 0.000
           com_noise = [0, 0, 0] + [self.default_ipos[i] + np.random.uniform(-delta, delta) for i in range(3, len(self.default_ipos))]
 
-          fric_noise = [np.random.uniform(0.6, 1.2)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
+          fric_noise = [np.random.uniform(0.4, 1.2)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
 
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))
@@ -285,7 +285,7 @@ class CassieEnv_v2:
           target = ref_pos[j]
           actual = qpos[j]
 
-          joint_error += 20 * weight[i] * (target - actual) ** 2
+          joint_error += 30 * weight[i] * (target - actual) ** 2
 
       """
       # center of mass: x, y, z

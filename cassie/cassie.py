@@ -230,14 +230,18 @@ class CassieEnv_v2:
           mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
           mass_noise = [np.random.uniform(a, b) for a, b in mass_range]
 
-          delta = 0.06
-          com_noise = [0, 0, 0] + [self.default_ipos[4] + np.random.uniform(-delta, delta)] + self.default_ipos[5:]
+          delta = 0.07
+          com_noise = [0, 0, 0] + [np.random.uniform(-delta, delta)] + list(self.default_ipos[4:])
+          #print("should be ", com_noise[3])
+          #print(len(com_noise), len(self.default_ipos))
+          #print(com_noise[:10])
+          #print(self.default_ipos[:10])
 
           fric_noise = [np.random.uniform(0.4, 1.2)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
 
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))
-          self.sim.set_body_ipos(np.clip(com_noise, 0, None))
+          self.sim.set_body_ipos(com_noise)
           self.sim.set_ground_friction(np.clip(fric_noise, 0, None))
       else:
           self.sim.set_dof_damping(self.default_damping)

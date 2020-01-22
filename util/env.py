@@ -71,7 +71,8 @@ def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
     env = env_factory(env_name)()
 
   while True:
-    env.dynamics_randomization = False
+    env.dynamics_randomization = True
+    print('env ipos pelvis x: {}'.format(env.sim.get_body_ipos()[:5]))
     state = env.reset()
     done = False
     timesteps = 0

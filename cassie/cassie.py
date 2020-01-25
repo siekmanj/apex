@@ -174,8 +174,8 @@ class CassieEnv_v2:
       # Randomize dynamics:
       if self.dynamics_randomization:
           damp = self.default_damping
-          weak_factor = 1.1
-          strong_factor = 1.1
+          weak_factor = 0.7
+          strong_factor = 1.3
           pelvis_damp_range = [[damp[0], damp[0]], 
                                [damp[1], damp[1]], 
                                [damp[2], damp[2]], 
@@ -183,28 +183,28 @@ class CassieEnv_v2:
                                [damp[4], damp[4]], 
                                [damp[5], damp[5]]]                 # 0->5
 
-          hip_damp_range = [[damp[6]/weak_factor, damp[6]*weak_factor],
-                            [damp[7]/weak_factor, damp[7]*weak_factor],
-                            [damp[8]/weak_factor, damp[8]*weak_factor]]  # 6->8 and 19->21
+          hip_damp_range = [[damp[6]*weak_factor, damp[6]*strong_factor],
+                            [damp[7]*weak_factor, damp[7]*strong_factor],
+                            [damp[8]*weak_factor, damp[8]*strong_factor]]  # 6->8 and 19->21
 
-          achilles_damp_range = [[damp[9]/weak_factor,  damp[9]*weak_factor],
-                                 [damp[10]/weak_factor, damp[10]*weak_factor], 
-                                 [damp[11]/weak_factor, damp[11]*weak_factor]] # 9->11 and 22->24
+          achilles_damp_range = [[damp[9]*weak_factor,  damp[9]*strong_factor],
+                                 [damp[10]*weak_factor, damp[10]*strong_factor], 
+                                 [damp[11]*weak_factor, damp[11]*strong_factor]] # 9->11 and 22->24
 
-          knee_damp_range     = [[damp[12]/weak_factor, damp[12]*weak_factor]]   # 12 and 25
-          shin_damp_range     = [[damp[13]/weak_factor, damp[13]*weak_factor]]   # 13 and 26
-          tarsus_damp_range   = [[damp[14], damp[14]*strong_factor]]             # 14 and 27
+          knee_damp_range     = [[damp[12]*weak_factor, damp[12]*strong_factor]]   # 12 and 25
+          shin_damp_range     = [[damp[13]*weak_factor, damp[13]*strong_factor]]   # 13 and 26
+          tarsus_damp_range   = [[damp[14], damp[14]]]             # 14 and 27
           heel_damp_range     = [[damp[15], damp[15]]]                           # 15 and 28
-          fcrank_damp_range   = [[damp[16]/weak_factor, damp[16]*weak_factor]]   # 16 and 29
+          fcrank_damp_range   = [[damp[16]*weak_factor, damp[16]*strong_factor]]   # 16 and 29
           prod_damp_range     = [[damp[17], damp[17]]]                           # 17 and 30
-          foot_damp_range     = [[damp[18]/weak_factor, damp[18]*weak_factor]]   # 18 and 31
+          foot_damp_range     = [[damp[18]*weak_factor, damp[18]*strong_factor]]   # 18 and 31
 
           side_damp = hip_damp_range + achilles_damp_range + knee_damp_range + shin_damp_range + tarsus_damp_range + heel_damp_range + fcrank_damp_range + prod_damp_range + foot_damp_range
           damp_range = pelvis_damp_range + side_damp + side_damp
           damp_noise = [np.random.uniform(a, b) for a, b in damp_range]
 
-          hi = 1.1
-          lo = 0.9
+          hi = 1.3
+          lo = 0.7
           m = self.default_mass
           pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
           hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16
@@ -230,7 +230,7 @@ class CassieEnv_v2:
           mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
           mass_noise = [np.random.uniform(a, b) for a, b in mass_range]
 
-          delta = 0.07
+          delta = 0.1
           com_noise = [0, 0, 0] + [np.random.uniform(-delta, delta)] + list(self.default_ipos[4:])
           #print("should be ", com_noise[3])
           #print(len(com_noise), len(self.default_ipos))

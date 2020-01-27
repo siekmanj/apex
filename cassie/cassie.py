@@ -230,8 +230,9 @@ class CassieEnv_v2:
           mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
           mass_noise = [np.random.uniform(a, b) for a, b in mass_range]
 
-          delta = 0.15
-          com_noise = [0, 0, 0] + [np.random.uniform(-delta, delta)] + list(self.default_ipos[4:])
+          delta_y = 0.05
+          delta_z = 0.05
+          com_noise = [0, 0, 0] + [np.random.uniform(-0.25, 0.06)] + [np.random.uniform(-delta_y, delta_y)] + [np.random.uniform(-delta_z, delta_z)] + list(self.default_ipos[6:])
 
           fric_noise = [np.random.uniform(0.5, 1.3)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
 

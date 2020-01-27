@@ -174,8 +174,8 @@ class CassieEnv_v2:
       # Randomize dynamics:
       if self.dynamics_randomization:
           damp = self.default_damping
-          weak_factor = 0.7
-          strong_factor = 1.3
+          weak_factor = 0.85
+          strong_factor = 1.15
           pelvis_damp_range = [[damp[0], damp[0]], 
                                [damp[1], damp[1]], 
                                [damp[2], damp[2]], 
@@ -203,8 +203,8 @@ class CassieEnv_v2:
           damp_range = pelvis_damp_range + side_damp + side_damp
           damp_noise = [np.random.uniform(a, b) for a, b in damp_range]
 
-          hi = 1.3
-          lo = 0.7
+          hi = 1.15
+          lo = 0.85
           m = self.default_mass
           pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
           hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16
@@ -230,14 +230,14 @@ class CassieEnv_v2:
           mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
           mass_noise = [np.random.uniform(a, b) for a, b in mass_range]
 
-          delta = 0.1
+          delta = 0.15
           com_noise = [0, 0, 0] + [np.random.uniform(-delta, delta)] + list(self.default_ipos[4:])
           #print("should be ", com_noise[3])
           #print(len(com_noise), len(self.default_ipos))
           #print(com_noise[:10])
           #print(self.default_ipos[:10])
 
-          fric_noise = [np.random.uniform(0.4, 1.2)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
+          fric_noise = [np.random.uniform(0.5, 1.3)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
 
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))
@@ -255,7 +255,7 @@ class CassieEnv_v2:
       # Need to reset u? Or better way to reset cassie_state than taking step
       self.cassie_state = self.sim.step_pd(self.u)
 
-      self.speed = (random.randint(0, 10)) / 10
+      self.speed = (random.randint(0, 5)) / 5
       # maybe make ref traj only send relevant idxs?
       ref_pos, ref_vel = self.get_ref_state(self.phase)
 

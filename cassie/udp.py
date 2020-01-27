@@ -292,7 +292,7 @@ def run_udp(args):
           RL_state = np.concatenate([robot_state, ext_state])
           
           #pretending the height is always 1.0
-          RL_state[0] = 1.0
+          #RL_state[0] = 1.0
           
           # Construct input vector
           torch_state = torch.Tensor(RL_state)

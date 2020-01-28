@@ -395,6 +395,7 @@ def run_experiment(args):
     print("\tseed:               {}".format(args.seed))
     print("\tenv:                {}".format(args.env_name))
     print("\ttimesteps:          {:n}".format(int(args.timesteps)))
+    print("\titeration steps:    {:n}".format(int(args.num_steps)))
     print("\tprenormalize steps: {}".format(int(args.prenormalize_steps)))
     print("\ttraj_len:           {}".format(args.traj_len))
     print("\tdiscount:           {}".format(args.discount))

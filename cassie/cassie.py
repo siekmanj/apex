@@ -253,7 +253,7 @@ class CassieEnv_v2:
       self.cassie_state = self.sim.step_pd(self.u)
 
       #self.speed = (random.randint(0, 10)) / 10
-      self.speed = np.uniform(-0.15, 0.8)
+      self.speed = np.random.uniform(-0.15, 0.8)
       # maybe make ref traj only send relevant idxs?
       ref_pos, ref_vel = self.get_ref_state(self.phase)
 

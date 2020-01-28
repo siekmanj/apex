@@ -174,8 +174,8 @@ class CassieEnv_v2:
       # Randomize dynamics:
       if self.dynamics_randomization:
           damp = self.default_damping
-          weak_factor = 0.8
-          strong_factor = 1.2
+          weak_factor = 0.5
+          strong_factor = 1.5
           pelvis_damp_range = [[damp[0], damp[0]], 
                                [damp[1], damp[1]], 
                                [damp[2], damp[2]], 
@@ -203,8 +203,8 @@ class CassieEnv_v2:
           damp_range = pelvis_damp_range + side_damp + side_damp
           damp_noise = [np.random.uniform(a, b) for a, b in damp_range]
 
-          hi = 1.2
-          lo = 0.8
+          hi = 1.4
+          lo = 0.6
           m = self.default_mass
           pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
           hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16
@@ -230,11 +230,11 @@ class CassieEnv_v2:
           mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
           mass_noise = [np.random.uniform(a, b) for a, b in mass_range]
 
-          delta_y = 0.05
-          delta_z = 0.05
-          com_noise = [0, 0, 0] + [np.random.uniform(-0.25, 0.06)] + [np.random.uniform(-delta_y, delta_y)] + [np.random.uniform(-delta_z, delta_z)] + list(self.default_ipos[6:])
+          delta_y_min, delta_y_max = self.default_ipos[4] - 0.07, self.default_ipos[4] + 0.07
+          delta_z_min, delta_z_max = self.default_ipos[5] - 0.04, self.default_ipos[5] + 0.04
+          com_noise = [0, 0, 0] + [np.random.uniform(-0.25, 0.06)] + [np.random.uniform(delta_y_min, delta_y_max)] + [np.random.uniform(delta_z_min, delta_z_max)] + list(self.default_ipos[6:])
 
-          fric_noise = [np.random.uniform(0.5, 1.3)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
+          fric_noise = [np.random.uniform(0.4, 1.4)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
 
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))
@@ -252,7 +252,8 @@ class CassieEnv_v2:
       # Need to reset u? Or better way to reset cassie_state than taking step
       self.cassie_state = self.sim.step_pd(self.u)
 
-      self.speed = (random.randint(0, 5)) / 5
+      #self.speed = (random.randint(0, 10)) / 10
+      self.speed = np.uniform(-0.15, 0.8)
       # maybe make ref traj only send relevant idxs?
       ref_pos, ref_vel = self.get_ref_state(self.phase)
 

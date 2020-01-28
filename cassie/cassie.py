@@ -203,8 +203,8 @@ class CassieEnv_v2:
           damp_range = pelvis_damp_range + side_damp + side_damp
           damp_noise = [np.random.uniform(a, b) for a, b in damp_range]
 
-          hi = 1.4
-          lo = 0.6
+          hi = 1.3
+          lo = 0.7
           m = self.default_mass
           pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
           hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16

@@ -13,11 +13,11 @@ import random
 import pickle
 
 class CassieEnv_v2:
-  def __init__(self, traj='walking', simrate=60, clock_based=False, state_est=False, dynamics_randomization=False, no_delta=False, ik_traj=None):
+  def __init__(self, traj='walking', simrate=60, clock=True, state_est=False, dynamics_randomization=False, no_delta=False, ik_traj=None):
     self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
     self.vis = None
 
-    self.clock_based = clock_based
+    self.clock = clock
     self.state_est = state_est
     self.no_delta = no_delta
     self.dynamics_randomization = dynamics_randomization
@@ -30,16 +30,21 @@ class CassieEnv_v2:
 
     speed_size     = 1
 
-    if clock_based:
+    if clock:
         if self.state_est:
             self.observation_space = np.zeros(state_est_size + clock_size + speed_size)
         else:
           self.observation_space = np.zeros(mjstate_size + clock_size + speed_size)
     else:
         if self.state_est:
-          self.observation_space = np.zeros(state_est_size + ref_traj_size)
+            self.observation_space = np.zeros(state_est_size + speed_size)
         else:
-          self.observation_space = np.zeros(mjstate_size + ref_traj_size)
+          self.observation_space = np.zeros(mjstate_size + speed_size)
+    #else:
+    #    if self.state_est:
+    #      self.observation_space = np.zeros(state_est_size + ref_traj_size)
+    #    else:
+    #      self.observation_space = np.zeros(mjstate_size + ref_traj_size)
 
     self.action_space = np.zeros(10)
 
@@ -384,14 +389,14 @@ class CassieEnv_v2:
       # trajectory despite being global coord. Y is only invariant to straight
       # line trajectories.
 
-      if self.clock_based:
+      if self.clock:
         clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
                  np.cos(2 * np.pi *  self.phase / self.phaselen)]
         
         ext_state = np.concatenate((clock, [self.speed]))
 
       else:
-        ext_state = np.concatenate([ref_pos[self.pos_index], ref_vel[self.vel_index]])
+        ext_state = [self.speed]
 
       # Use state estimator
       robot_state = np.concatenate([

@@ -43,7 +43,7 @@ def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=Fal
       print("\tstate estimation:       {}".format(state_est))
       print("\tno delta:               {}".format(no_delta))
       print("\tclock based:            {}".format(clock))
-      return partial(CassieEnv_v2, 'walking', clock=clock_based, state_est=state_est, no_delta=no_delta, dynamics_randomization=dynamics_randomization)
+      return partial(CassieEnv_v2, 'walking', clock=clock, state_est=state_est, no_delta=no_delta, dynamics_randomization=dynamics_randomization)
 
     import gym
     spec = gym.envs.registry.spec(path)
@@ -71,8 +71,6 @@ def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
     env = env_factory(env_name)()
 
   while True:
-    #env.dynamics_randomization = True
-    #print('env ipos pelvis x: {}'.format(env.sim.get_body_ipos()[:5]))
     state = env.reset()
     done = False
     timesteps = 0

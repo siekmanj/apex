@@ -7,10 +7,10 @@ torch.manual_seed(0)
 np.random.seed(0)
 policies = []
 #for filename in Path('rss2').rglob('actor.pt'):
-for filename in Path('rss2/ppo/Cassie-nodelta-stateest-clockbased-dynamicsrandom-aggressive-rss3').rglob('actor.pt'):
+for filename in Path('rss2').rglob('actor.pt'):
   policies.append(filename)
 
-max_traj_len=600
+max_traj_len=1200
 visualize=True
 env = env_factory('cassie-dynamicsrandom-nodelta-stateest-clockbased')()
 trial_damp = []
@@ -18,7 +18,7 @@ trial_mass = []
 trial_ipos = []
 trial_fric = []
 
-trials = 15
+trials = 10
 
 for trial in range(trials):
   env.reset()

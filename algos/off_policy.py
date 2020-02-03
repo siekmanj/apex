@@ -134,6 +134,7 @@ def run_experiment(args):
   replay_buff = ReplayBuffer(obs_space, act_space, args.timesteps)
 
   if args.recurrent:
+    print('Recurrent ', end='')
     q1 = LSTM_Q(obs_space, act_space, env_name=args.env_name)
     q2 = LSTM_Q(obs_space, act_space, env_name=args.env_name)
 
@@ -151,13 +152,14 @@ def run_experiment(args):
       actor = FF_Actor(obs_space, act_space, env_name=args.env_name)
 
   if args.algo == 'sac':
+    print('Soft Actor-Critic')
     algo = SAC(actor, q1, q2, torch.prod(torch.Tensor(env.reset().shape)), args)
   elif args.algo == 'td3':
+    print('Twin-Delayed Deep Deterministic Policy Gradient')
     algo = TD3(actor, q1, q2, args)
   elif args.algo == 'ddpg':
+    print('Deep Deterministic Policy Gradient')
     algo = DDPG(actor, q1, args)
-
-  #algo = SAC(actor, q1, q2, args.a_lr, args.c_lr, target_entropy, discount=args.discount)
 
   print("\tenv:            {}".format(args.env_name))
   print("\tseed:           {}".format(args.seed))
@@ -180,8 +182,8 @@ def run_experiment(args):
   if args.save_actor is None:
     args.save_actor = os.path.join(logger.dir, 'actor.pt')
 
-  if args.save_critic is None:
-    args.save_critic = os.path.join(logger.dir, 'critic.pt')
+  #if args.save_critic is None:
+  #  args.save_critic = os.path.join(logger.dir, 'critic.pt')
 
   # Keep track of some statistics for each episode
   training_start = time.time()

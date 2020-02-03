@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import random
+import time
 
 from torch.nn.utils.rnn import pad_sequence
 
@@ -192,10 +193,12 @@ def collect_experience(policy, env, replay_buffer, initial_state, steps, random_
     else:
       a = np.random.randn(policy.action_dim)
 
+    print('action: {}'.format(a))
     state_t1, r, done, _ = env.step(a)
 
     if done or steps > max_len:
       state_t1 = env.reset()
+      time.sleep(0.001)
       done = True
       if hasattr(policy, 'init_hidden_state'):
         policy.init_hidden_state()

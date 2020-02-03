@@ -30,7 +30,7 @@ class SAC():
 
     self.gamma = args.discount
     self.tau = args.tau
-    self.expl_noise = 0
+    self.expl_noise = None
 
   def soft_update(self, tau):
     for param, target_param in zip(self.q1.parameters(), self.target_q1.parameters()):
@@ -39,10 +39,13 @@ class SAC():
     for param, target_param in zip(self.q2.parameters(), self.target_q2.parameters()):
       target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
-  def update_policy(self, buff, batch_size=64):
+  def update_policy(self, buff, batch_size=64, traj_len=400):
     state, action, next_state, reward, not_done, steps, mask = buff.sample(batch_size)
 
     with torch.no_grad():
+      state      = self.actor.normalize_state(state, update=False)
+      next_state = self.actor.normalize_state(next_state, update=False)
+
       next_action, next_log_prob = self.actor(next_state, deterministic=False, return_log_probs=True)
       next_target_q1 = self.target_q1(next_state, next_action)
       next_target_q2 = self.target_q2(next_state, next_action)

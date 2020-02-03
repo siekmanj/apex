@@ -91,14 +91,18 @@ class ReplayBuffer():
       idx = np.random.randint(0, self.size, size=batch_size)
       return self.state[idx], self.action[idx], self.next_state[idx], self.reward[idx], self.not_done[idx], batch_size, 1
 
-def collect_experience(policy, env, replay_buffer, initial_state, steps, random_action=False, noise=0.2, max_len=1000):
+def collect_experience(policy, env, replay_buffer, initial_state, steps, noise=0.2, max_len=1000):
   with torch.no_grad():
     state = policy.normalize_state(torch.Tensor(initial_state))
 
-    if not random_action:
-      a = policy.forward(torch.Tensor(state)).numpy() + np.random.normal(0, noise, size=policy.action_dim)
+    #if not random_action:
+    #  a = policy.forward(torch.Tensor(state)).numpy() + np.random.normal(0, noise, size=policy.action_dim)
+    #else:
+    #  a = np.random.randn(policy.action_dim)
+    if noise is None:
+      a = policy.forward(state, deterministic=False).numpy()
     else:
-      a = np.random.randn(policy.action_dim)
+      a = policy.forward(state).numpy() + np.random.normal(0, noise, size=policy.action_dim)
 
     state_t1, r, done, _ = env.step(a)
 
@@ -201,7 +205,6 @@ def run_experiment(args):
 
     state, r, done = collect_experience(algo.actor, env, replay_buff, state, episode_timesteps,
                                         max_len=args.traj_len,
-                                        random_action=warmup,
                                         noise=algo.expl_noise)
     episode_reward += r
     episode_timesteps += 1

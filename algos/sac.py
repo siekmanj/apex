@@ -52,18 +52,11 @@ class SAC():
       next_target_q1 = self.target_q1(next_state, next_action)
       next_target_q2 = self.target_q2(next_state, next_action)
       next_target_q  = torch.min(next_target_q1, next_target_q2) - self.alpha * next_log_prob
-      print("{} = {} - {} * {}".format(next_target_q.size(), torch.min(next_target_q1, next_target_q2).size(), self.alpha, next_log_prob.size()))
       next_q = reward + not_done * self.gamma * next_target_q
-      #print("{} = {} + {} * {} * {}".format(next_q.size(), reward.size(), not_done.size(), self.gamma, next_target_q.size()))
 
     q1 = self.q1(state, action)
     q2 = self.q2(state, action)
-
-    print(q1.size())
-    print(q2.size())
-    print(next_q.size())
     q1_loss = F.mse_loss(q1, next_q)
-    exit(1)
     q2_loss = F.mse_loss(q2, next_q)
 
     pi, log_prob = self.actor(state, deterministic=False, return_log_probs=True)
@@ -222,7 +215,6 @@ def run_experiment(args):
 
         if best_reward is None or eval_reward > best_reward:
           torch.save(algo.actor, args.save_actor)
-          #torch.save(algo.critic, args.save_critic)
           best_reward = eval_reward
           print("\t(best policy so far! saving to {})".format(args.save_actor))
 

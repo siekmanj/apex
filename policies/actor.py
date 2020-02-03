@@ -99,7 +99,7 @@ class FF_Stochastic_Actor(Actor):
     for idx, layer in enumerate(self.actor_layers):
       x = self.nonlinearity(layer(x))
 
-    mu = torch.tanh(self.means(x))
+    mu = self.means(x)
 
     if self.learn_std:
       sd = torch.clamp(self.log_stds(x), -20, 2).exp()
@@ -113,12 +113,12 @@ class FF_Stochastic_Actor(Actor):
 
     if not deterministic or return_log_probs:
       dist = torch.distributions.Normal(mu, sd)
-      sample = dist.sample()
+      sample = dist.rsample()
 
     self.action = mu if deterministic else sample
 
     if return_log_probs:
-      return self.action, dist.log_prob(sample)
+      return self.action, dist.log_prob(sample).sum(1, keepdim=True)
     else:
       return self.action
 

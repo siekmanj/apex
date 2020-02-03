@@ -54,18 +54,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
     run_experiment(args)
 
-  elif sys.argv[1] == 'ddpg' or sys.argv[1] == 'rdpg':
-
-    if sys.argv[1] == 'ddpg':
-      recurrent = False
-    if sys.argv[1] == 'rdpg':
-      recurrent = True
-
+  elif sys.argv[1] == 'ddpg':
     sys.argv.remove(sys.argv[1])
     """
       Utility for running Recurrent/Deep Deterministic Policy Gradients.
     """
-    from algos.dpg import run_experiment
+    from algos.off_policy import run_experiment
     parser.add_argument("--timesteps",       "-t",  default=1e6,   type=float)      # number of timesteps in replay buffer
     parser.add_argument("--start_timesteps",        default=1e4,   type=int)      # number of timesteps to generate random actions for
     parser.add_argument("--load_actor",             default=None,  type=str)      # load an actor from a .pt file
@@ -84,38 +78,37 @@ if __name__ == "__main__":
     parser.add_argument("--eval_every",             default=100,   type=int)      # how often to evaluate the trained policy
     parser.add_argument("--save_actor",             default=None, type=str)
     parser.add_argument("--save_critic",            default=None, type=str)
+    parser.add_argument("--recurrent",              action='store_true')
 
-    if not recurrent:
-      parser.add_argument("--logdir",                 default="./logs/ddpg/", type=str)
-    else:
-      parser.add_argument("--logdir",                 default="./logs/rdpg/", type=str)
+    parser.add_argument("--logdir",                 default="./logs/ddpg/", type=str)
 
     parser.add_argument("--seed",     "-s",   default=0, type=int)
     parser.add_argument("--env_name", "-e",   default="Hopper-v3")
     args = parser.parse_args()
-
-    args.recurrent = recurrent
+    args.algo = 'ddpg'
 
     run_experiment(args)
 
-  elif sys.argv[1] == 'td3' or sys.argv[1] == 'rtd3':
+  elif sys.argv[1] == 'td3':
 
+    """
     if sys.argv[1] == 'td3':
       recurrent = False
     if sys.argv[1] == 'rtd3':
       recurrent = True
+    """
 
     sys.argv.remove(sys.argv[1])
     """
       Utility for running Twin-Delayed Deep Deterministic policy gradients.
 
     """
-    from algos.td3 import run_experiment
+    from algos.off_policy import run_experiment
     parser.add_argument("--timesteps",       "-t",  default=1e6,   type=float)    # number of timesteps in replay buffer
     parser.add_argument("--start_timesteps",        default=1e4,   type=float)      # number of timesteps to generate random actions for
     parser.add_argument("--load_actor",             default=None,  type=str)      # load an actor from a .pt file
-    parser.add_argument("--load_critic1",           default=None,  type=str)      # load a critic from a .pt file
-    parser.add_argument("--load_critic2",           default=None,  type=str)      # load a critic from a .pt file
+    #parser.add_argument("--load_critic1",           default=None,  type=str)      # load a critic from a .pt file
+    #parser.add_argument("--load_critic2",           default=None,  type=str)      # load a critic from a .pt file
     parser.add_argument('--discount',               default=0.99,  type=float)    # the discount factor
     parser.add_argument('--expl_noise',             default=0.1,   type=float)    # random noise used for exploration
     parser.add_argument('--max_action',             default=1.0,   type=float)    # 
@@ -126,24 +119,21 @@ if __name__ == "__main__":
     parser.add_argument("--c_lr",           "-clr", default=3e-4,  type=float)    # adam learning rate for actor
     parser.add_argument("--traj_len",       "-tl",  default=1000,  type=int)      # max trajectory length for environment
     parser.add_argument("--center_reward",  "-r",   action='store_true')          # normalize rewards to a normal distribution
-    parser.add_argument("--normc_init",             default=True,  type=bool)     # using col norm to init weights
-    parser.add_argument("--normalize",              action='store_true')          # normalize states online
+    #parser.add_argument("--normc_init",             default=True,  type=bool)     # using col norm to init weights
+    #parser.add_argument("--normalize",              action='store_true')          # normalize states online
     parser.add_argument("--batch_size",             default=256,    type=int)     # batch size for policy update
     parser.add_argument("--updates",                default=1,    type=int)       # (if recurrent) number of times to update policy per episode
     parser.add_argument("--update_every",           default=2,    type=int)       # how many episodes to skip before updating
     parser.add_argument("--eval_every",             default=100,   type=int)      # how often to evaluate the trained policy
     parser.add_argument("--save_actor",             default=None, type=str)
     parser.add_argument("--save_critics",           default=None, type=str)
-
-    if not recurrent:
-      parser.add_argument("--logdir",                 default="./logs/td3/", type=str)
-    else:
-      parser.add_argument("--logdir",                 default="./logs/rtd3/", type=str)
+    parser.add_argument("--logdir",                 default="./logs/td3/", type=str)
+    parser.add_argument("--recurrent",              action='store_true') 
 
     parser.add_argument("--seed",     "-s",   default=0, type=int)
     parser.add_argument("--env_name", "-e",   default="Hopper-v3")
     args = parser.parse_args()
-    args.recurrent = recurrent
+    args.algo      = 'td3'
 
     run_experiment(args)
 
@@ -188,7 +178,7 @@ if __name__ == "__main__":
       Utility for running Soft Actor-Critic.
 
     """
-    from algos.sac import run_experiment
+    from algos.off_policy import run_experiment
     parser.add_argument("--seed",                   default=0,             type=int)      # number of timesteps to run experiment for
     parser.add_argument("--timesteps",       "-t",  default=1e6,           type=float)      # number of timesteps to run experiment for
     parser.add_argument("--env_name",               default='Cassie-v0',   type=str)
@@ -209,6 +199,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--logdir",                 default="./logs/sac/", type=str)
     args = parser.parse_args()
+    args.algo = 'sac'
 
     run_experiment(args)
 

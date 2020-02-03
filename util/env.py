@@ -63,38 +63,40 @@ def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=Fal
 
     return partial(cls, **_kwargs)
 
-def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
+def eval_policy(policy, episodes=1000, max_traj_len=1000, visualize=True, env_name=None, verbose=True):
+  with torch.no_grad():
+    if env_name is None:
+      env = env_factory(policy.env_name)()
+    else:
+      env = env_factory(env_name)()
 
-  if env_name is None:
-    env = env_factory(policy.env_name)()
-  else:
-    env = env_factory(env_name)()
+    reward_sum = 0
+    for _ in range(episodes):
+      state = env.reset()
+      done = False
+      timesteps = 0
+      eval_reward = 0
+      if hasattr(policy, 'init_hidden_state'):
+        policy.init_hidden_state()
+      while not done and timesteps < max_traj_len:
+        if hasattr(env, 'simrate') and visualize:
+          start = time.time()
 
-  while True:
-    state = env.reset()
-    done = False
-    timesteps = 0
-    eval_reward = 0
-    if hasattr(policy, 'init_hidden_state'):
-      policy.init_hidden_state()
+        state = policy.normalize_state(state, update=False)
+        action = policy.forward(torch.Tensor(state)).detach().numpy()
+        state, reward, done, _ = env.step(action)
+        if visualize:
+          env.render()
+        eval_reward += reward
+        timesteps += 1
 
-    while not done and timesteps < max_traj_len:
+        if hasattr(env, 'simrate') and visualize:
+          # assume 30hz (hack)
+          end = time.time()
+          delaytime = max(0, 1000 / 30000 - (end-start))
+          time.sleep(delaytime)
 
-      if hasattr(env, 'simrate'):
-        start = time.time()
-      
-      state = policy.normalize_state(state, update=False)
-      action = policy.forward(torch.Tensor(state)).detach().numpy()
-      state, reward, done, _ = env.step(action)
-      if visualize:
-        env.render()
-      eval_reward += reward
-      timesteps += 1
-
-      if hasattr(env, 'simrate'):
-        # assume 30hz (hack)
-        end = time.time()
-        delaytime = max(0, 1000 / 30000 - (end-start))
-        time.sleep(delaytime)
-
-    print("Eval reward: ", eval_reward)
+      reward_sum += eval_reward
+      if verbose:
+        print("Eval reward: ", eval_reward)
+    return reward_sum / episodes

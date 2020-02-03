@@ -5,14 +5,11 @@ import torch.nn.functional as F
 import numpy as np
 import random
 
-from algos.dpg import eval_policy, collect_experience, ReplayBuffer
+#from algos.ddpg import eval_policy, collect_experience, ReplayBuffer
 
 class TD3():
-  def __init__(self, actor, q1, q2, a_lr, c_lr, discount=0.99, tau=0.001, center_reward=False, policy_noise=0.2, update_freq=2, noise_clip=0.5, normalize=False):
-    if actor.is_recurrent or q1.is_recurrent or q2.is_recurrent:
-      self.recurrent = True
-    else:
-      self.recurrent = False
+  def __init__(self, actor, q1, q2, args):
+    self.recurrent = args.recurrent
 
     self.behavioral_actor  = actor
     self.behavioral_q1 = q1
@@ -24,18 +21,15 @@ class TD3():
 
     self.soft_update(1.0)
 
-    self.actor_optimizer  = torch.optim.Adam(self.behavioral_actor.parameters(), lr=a_lr)
-    self.q1_optimizer = torch.optim.Adam(self.behavioral_q1.parameters(), lr=c_lr, weight_decay=1e-2)
-    self.q2_optimizer = torch.optim.Adam(self.behavioral_q2.parameters(), lr=c_lr, weight_decay=1e-2)
+    self.actor_optimizer  = torch.optim.Adam(self.behavioral_actor.parameters(), lr=args.a_lr)
+    self.q1_optimizer = torch.optim.Adam(self.behavioral_q1.parameters(), lr=args.c_lr, weight_decay=1e-2)
+    self.q2_optimizer = torch.optim.Adam(self.behavioral_q2.parameters(), lr=args.c_lr, weight_decay=1e-2)
 
-    self.discount   = discount
-    self.tau        = tau
-    self.center_reward = center_reward
-    self.update_every = update_freq
+    self.discount   = args.discount
+    self.tau        = args.tau
+    self.update_every = args.update_freq
 
-    self.policy_noise = policy_noise
-
-    self.normalize = normalize
+    self.policy_noise = args.policy_noise
 
     self.n = 0
 
@@ -55,9 +49,8 @@ class TD3():
     states, actions, next_states, rewards, not_dones, steps, mask = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
 
     with torch.no_grad():
-      if self.normalize:
-        states      = self.behavioral_actor.normalize_state(states, update=False)
-        next_states = self.behavioral_actor.normalize_state(next_states, update=False)
+      states      = self.behavioral_actor.normalize_state(states, update=False)
+      next_states = self.behavioral_actor.normalize_state(next_states, update=False)
 
       noise        = (torch.randn_like(actions) * self.policy_noise).clamp(-noise_clip, noise_clip)
       next_actions = (self.target_actor(next_states) + noise)
@@ -95,6 +88,7 @@ class TD3():
 
     return critic_loss.item(), steps
 
+"""
 def run_experiment(args):
   from time import time
 
@@ -253,3 +247,4 @@ def run_experiment(args):
 
       episode_start, episode_reward, episode_timesteps, episode_loss = time(), 0, 0, 0
       iter += 1
+"""

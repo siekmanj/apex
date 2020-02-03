@@ -7,10 +7,10 @@ import random
 
 from torch.nn.utils.rnn import pad_sequence
 
-from algos.dpg import eval_policy, collect_experience, ReplayBuffer
+#from algos.ddpg import eval_policy, collect_experience, ReplayBuffer
 
 class SAC():
-  def __init__(self, actor, q1, q2, a_lr, c_lr, target_entropy, discount=0.99, tau=0.01):
+  def __init__(self, actor, q1, q2, target_entropy, args):
     self.actor  = actor
     self.q1 = q1
     self.q2 = q2
@@ -18,21 +18,21 @@ class SAC():
     self.recurrent = False
     self.normalize=False
 
-    #self.target_actor  = copy.deepcopy(actor)
     self.target_q1 = copy.deepcopy(q1)
     self.target_q2 = copy.deepcopy(q2)
 
-    self.actor_optim  = torch.optim.Adam(self.actor.parameters(), lr=a_lr)
-    self.q1_optim = torch.optim.Adam(self.q1.parameters(), lr=c_lr)
-    self.q2_optim = torch.optim.Adam(self.q2.parameters(), lr=c_lr)
+    self.actor_optim  = torch.optim.Adam(self.actor.parameters(), lr=args.a_lr)
+    self.q1_optim = torch.optim.Adam(self.q1.parameters(), lr=args.c_lr)
+    self.q2_optim = torch.optim.Adam(self.q2.parameters(), lr=args.c_lr)
 
     self.target_entropy = target_entropy
     self.log_alpha = torch.zeros(1, requires_grad=True)
     self.alpha = self.log_alpha.exp()
-    self.alpha_optim = torch.optim.Adam([self.log_alpha], lr=a_lr)
+    self.alpha_optim = torch.optim.Adam([self.log_alpha], lr=args.a_lr)
 
-    self.gamma = discount
-    self.tau = tau
+    self.gamma = args.discount
+    self.tau = args.tau
+    self.expl_noise = 0
 
   def soft_update(self, tau):
     for param, target_param in zip(self.q1.parameters(), self.target_q1.parameters()):
@@ -40,9 +40,6 @@ class SAC():
 
     for param, target_param in zip(self.q2.parameters(), self.target_q2.parameters()):
       target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
-
-    #for param, target_param in zip(self.actor.parameters(), self.target_actor.parameters()):
-    #  target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
   def update_policy(self, buff, batch_size=64):
     state, action, next_state, reward, not_done, steps, mask = buff.sample(batch_size)

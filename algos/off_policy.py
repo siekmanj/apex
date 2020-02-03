@@ -1,10 +1,11 @@
-import copy
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from algos.ddpg import DDPG
+from algos.td3  import TD3
+from algos.sac  import SAC
+import locale, os, random, torch, time
 import numpy as np
-import random
-import time
+
+from util.env import env_factory, eval_policy
+from util.log import create_logger
 
 from torch.nn.utils.rnn import pad_sequence
 
@@ -90,103 +91,9 @@ class ReplayBuffer():
       idx = np.random.randint(0, self.size, size=batch_size)
       return self.state[idx], self.action[idx], self.next_state[idx], self.reward[idx], self.not_done[idx], batch_size, 1
 
-class DPG():
-  def __init__(self, actor, critic, a_lr, c_lr, discount=0.99, tau=0.001, center_reward=False, normalize=False):
-
-    if actor.is_recurrent or critic.is_recurrent:
-      self.recurrent = True
-    else:
-      self.recurrent = False
-
-    self.behavioral_actor  = actor
-    self.behavioral_critic = critic
-
-    self.target_actor = copy.deepcopy(actor)
-    self.target_critic = copy.deepcopy(critic)
-
-    self.soft_update(1.0)
-
-    self.actor_optimizer  = torch.optim.Adam(self.behavioral_actor.parameters(), lr=a_lr)
-    self.critic_optimizer = torch.optim.Adam(self.behavioral_critic.parameters(), lr=c_lr, weight_decay=1e-2)
-
-    self.discount   = discount
-    self.tau        = tau
-    self.center_reward = center_reward
-    self.normalize = normalize
-
-  def soft_update(self, tau):
-    for param, target_param in zip(self.behavioral_critic.parameters(), self.target_critic.parameters()):
-      target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
-
-    for param, target_param in zip(self.behavioral_actor.parameters(), self.target_actor.parameters()):
-      target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
-
-  def update_policy(self, replay_buffer, batch_size=256, traj_len=1000, grad_clip=None):
-    states, actions, next_states, rewards, not_dones, steps, mask = replay_buffer.sample(batch_size, sample_trajectories=self.recurrent, max_len=traj_len)
-
-    with torch.no_grad():
-      if self.normalize:
-        states      = self.behavioral_actor.normalize_state(states, update=False)
-        next_states = self.behavioral_actor.normalize_state(next_states, update=False)
-
-      target_q = rewards + (not_dones * self.discount * self.target_critic(next_states, self.target_actor(next_states))) * mask
-
-    current_q = self.behavioral_critic(states, actions) * mask
-
-    #for i, target in enumerate(current_q[:,4]):
-    #  print("ACTUAL {}: {}".format(i, target))
-
-
-    critic_loss = F.mse_loss(current_q, target_q)
-
-    self.critic_optimizer.zero_grad()
-    critic_loss.backward()
-
-    if grad_clip is not None:
-      torch.nn.utils.clip_grad_norm_(self.behavioral_critic.parameters(), grad_clip)
-
-    self.critic_optimizer.step()
-
-    actor_loss = -(self.behavioral_critic(states, self.behavioral_actor(states) * mask) * mask).mean()
-
-    self.actor_optimizer.zero_grad()
-    actor_loss.backward()
-
-    if grad_clip is not None:
-      torch.nn.utils.clip_grad_norm_(self.behavioral_actor.parameters(), grad_clip)
-
-    self.actor_optimizer.step()
-    
-    self.soft_update(self.tau)
-
-    return critic_loss.item(), steps
-
-def eval_policy(policy, env, evals=10, max_traj_len=1000):
-  eval_reward = 0
-  for _ in range(evals):
-    state = env.reset()
-    done = False
-    timesteps = 0
-
-    if hasattr(policy, 'init_hidden_state'):
-      policy.init_hidden_state()
-
-    while not done and timesteps < max_traj_len:
-      if hasattr(policy, 'normalize_state'):
-        state = policy.normalize_state(state, update=False)
-      action = policy.forward(torch.Tensor(state)).detach().numpy()
-      state, reward, done, _ = env.step(action)
-      eval_reward += reward
-      timesteps += 1
-
-  return eval_reward/evals
-
-def collect_experience(policy, env, replay_buffer, initial_state, steps, random_action=False, noise=0.2, do_trajectory=False, max_len=1000, normalize=False):
+def collect_experience(policy, env, replay_buffer, initial_state, steps, random_action=False, noise=0.2, max_len=1000):
   with torch.no_grad():
-    if normalize:
-      state = policy.normalize_state(torch.Tensor(initial_state))
-    else:
-      state = torch.Tensor(initial_state)
+    state = policy.normalize_state(torch.Tensor(initial_state))
 
     if not random_action:
       a = policy.forward(torch.Tensor(state)).numpy() + np.random.normal(0, noise, size=policy.action_dim)
@@ -207,20 +114,13 @@ def collect_experience(policy, env, replay_buffer, initial_state, steps, random_
     return state_t1, r, done
 
 def run_experiment(args):
-  from time import time
-
-  from util.env import env_factory
-  from util.log import create_logger
-
   from policies.critic import FF_Q, LSTM_Q
-  from policies.actor import FF_Actor, LSTM_Actor
+  from policies.actor import FF_Stochastic_Actor, LSTM_Stochastic_Actor, FF_Actor, LSTM_Actor
 
-  import locale, os
   locale.setlocale(locale.LC_ALL, '')
 
   # wrapper function for creating parallelized envs
   env = env_factory(args.env_name)()
-  eval_env = env_factory(args.env_name)()
 
   random.seed(args.seed)
   np.random.seed(args.seed)
@@ -231,21 +131,34 @@ def run_experiment(args):
   obs_space = env.observation_space.shape[0]
   act_space = env.action_space.shape[0]
 
-  if args.recurrent:
-    actor = LSTM_Actor(obs_space, act_space, env_name=args.env_name)
-    critic = LSTM_Q(obs_space, act_space, env_name=args.env_name)
-  else:
-    actor = FF_Actor(obs_space, act_space, env_name=args.env_name)
-    critic = FF_Q(obs_space, act_space, env_name=args.env_name)
-
-  algo = DPG(actor, critic, args.a_lr, args.c_lr, discount=args.discount, tau=args.tau, center_reward=args.center_reward, normalize=args.normalize)
-
   replay_buff = ReplayBuffer(obs_space, act_space, args.timesteps)
 
-  if algo.recurrent:
-    print("Recurrent Deterministic Policy Gradients:")
+  if args.recurrent:
+    q1 = LSTM_Q(obs_space, act_space, env_name=args.env_name)
+    q2 = LSTM_Q(obs_space, act_space, env_name=args.env_name)
+
+    if args.algo == 'sac':
+      actor = LSTM_Stochastic_Actor(obs_space, act_space, env_name=args.env_name)
+    else:
+      actor = LSTM_Actor(obs_space, act_space, env_name=args.env_name)
   else:
-    print("Deep Deterministic Policy Gradients:")
+    q1 = FF_Q(obs_space, act_space, env_name=args.env_name)
+    q2 = FF_Q(obs_space, act_space, env_name=args.env_name)
+
+    if args.algo == 'sac':
+      actor = FF_Stochastic_Actor(obs_space, act_space, env_name=args.env_name)
+    else:
+      actor = FF_Actor(obs_space, act_space, env_name=args.env_name)
+
+  if args.algo == 'sac':
+    algo = SAC(actor, q1, q2, torch.prod(torch.Tensor(env.reset().shape)), args)
+  elif args.algo == 'td3':
+    algo = TD3(actor, q1, q2, args)
+  elif args.algo == 'ddpg':
+    algo = DDPG(actor, q1, args)
+
+  #algo = SAC(actor, q1, q2, args.a_lr, args.c_lr, target_entropy, discount=args.discount)
+
   print("\tenv:            {}".format(args.env_name))
   print("\tseed:           {}".format(args.seed))
   print("\ttimesteps:      {:n}".format(args.timesteps))
@@ -253,8 +166,6 @@ def run_experiment(args):
   print("\tcritic_lr:      {}".format(args.c_lr))
   print("\tdiscount:       {}".format(args.discount))
   print("\ttau:            {}".format(args.tau))
-  print("\tnorm reward:    {}".format(args.center_reward))
-  print("\tnorm states:    {}".format(args.normalize))
   print("\tbatch_size:     {}".format(args.batch_size))
   print("\twarmup period:  {:n}".format(args.start_timesteps))
   print()
@@ -273,8 +184,8 @@ def run_experiment(args):
     args.save_critic = os.path.join(logger.dir, 'critic.pt')
 
   # Keep track of some statistics for each episode
-  training_start = time()
-  episode_start = time()
+  training_start = time.time()
+  episode_start = time.time()
   episode_loss = 0
   update_steps = 0
   best_reward = None
@@ -286,12 +197,10 @@ def run_experiment(args):
     buffer_ready = (algo.recurrent and iter > args.batch_size) or (not algo.recurrent and replay_buff.size > args.batch_size)
     warmup = timesteps < args.start_timesteps
 
-    state, r, done = collect_experience(algo.behavioral_actor, env, replay_buff, state, episode_timesteps,
-                                               max_len=args.traj_len,
-                                               random_action=warmup,
-                                               noise=args.expl_noise, 
-                                               do_trajectory=algo.recurrent,
-                                               normalize=algo.normalize)
+    state, r, done = collect_experience(algo.actor, env, replay_buff, state, episode_timesteps,
+                                        max_len=args.traj_len,
+                                        random_action=warmup,
+                                        noise=algo.expl_noise)
     episode_reward += r
     episode_timesteps += 1
     timesteps += 1
@@ -300,37 +209,34 @@ def run_experiment(args):
     if buffer_ready and done and not warmup:
       update_steps = 0
       if not algo.recurrent:
-        num_updates = episode_timesteps * args.updates
+        num_updates = episode_timesteps
       else:
-        num_updates = args.updates
-      for _ in range(num_updates):
-        u_loss, u_steps = algo.update_policy(replay_buff, args.batch_size, traj_len=args.traj_len)
-        episode_loss += u_loss / num_updates
-        update_steps += u_steps
+        num_updates = 1
 
-    if done:
-      episode_elapsed = (time() - episode_start)
+      for _ in range(num_updates):
+        losses = algo.update_policy(replay_buff, args.batch_size, traj_len=args.traj_len)
+
+      #if done:
+      episode_elapsed = (time.time() - episode_start)
       episode_secs_per_sample = episode_elapsed / episode_timesteps
-      logger.add_scalar(args.env_name + '/episode_length', episode_timesteps, iter)
-      logger.add_scalar(args.env_name + '/episode_return', episode_reward, iter)
-      logger.add_scalar(args.env_name + '/critic loss', episode_loss, iter)
+      #logger.add_scalar(args.env_name + '/episode_length', episode_timesteps, iter)
+      #logger.add_scalar(args.env_name + '/episode_return', episode_reward, iter)
+      #logger.add_scalar(args.env_name + '/critic loss', episode_loss, iter)
+      #logger.add_scalar(args.env_name + '/alpha loss', alpha_loss, iter)
 
       completion = 1 - float(timesteps) / args.timesteps
-      avg_sample_r = (time() - training_start)/timesteps
+      avg_sample_r = (time.time() - training_start)/timesteps
       secs_remaining = avg_sample_r * args.timesteps * completion
       hrs_remaining = int(secs_remaining//(60*60))
       min_remaining = int(secs_remaining - hrs_remaining*60*60)//60
 
       if iter % args.eval_every == 0 and iter != 0:
-        eval_reward = eval_policy(algo.behavioral_actor, eval_env, max_traj_len=args.traj_len)
+        eval_reward = eval_policy(algo.actor, episodes=10, verbose=False, visualize=False, max_traj_len=args.traj_len)
         logger.add_scalar(args.env_name + '/return', eval_reward, iter)
-        #logger.add_scalar(args.env_name + '', eval_reward, timesteps)
 
         print("evaluation after {:4d} episodes | return: {:7.3f} | timesteps {:9n}{:100s}".format(iter, eval_reward, timesteps, ''))
-
         if best_reward is None or eval_reward > best_reward:
-          torch.save(algo.behavioral_actor, args.save_actor)
-          torch.save(algo.behavioral_critic, args.save_critic)
+          torch.save(algo.actor, args.save_actor)
           best_reward = eval_reward
           print("\t(best policy so far! saving to {})".format(args.save_actor))
 
@@ -349,8 +255,8 @@ def run_experiment(args):
       pass
 
     if done:
-      if hasattr(algo.behavioral_actor, 'init_hidden_state'):
-        algo.behavioral_actor.init_hidden_state()
+      if hasattr(algo.actor, 'init_hidden_state'):
+        algo.actor.init_hidden_state()
 
-      episode_start, episode_reward, episode_timesteps, episode_loss = time(), 0, 0, 0
+      episode_start, episode_reward, episode_timesteps, episode_loss = time.time(), 0, 0, 0
       iter += 1

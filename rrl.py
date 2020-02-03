@@ -123,7 +123,7 @@ if __name__ == "__main__":
     #parser.add_argument("--normalize",              action='store_true')          # normalize states online
     parser.add_argument("--batch_size",             default=256,    type=int)     # batch size for policy update
     parser.add_argument("--updates",                default=1,    type=int)       # (if recurrent) number of times to update policy per episode
-    parser.add_argument("--update_every",           default=2,    type=int)       # how many episodes to skip before updating
+    parser.add_argument("--update_freq",           default=2,    type=int)       # how many episodes to skip before updating
     parser.add_argument("--eval_every",             default=100,   type=int)      # how often to evaluate the trained policy
     parser.add_argument("--save_actor",             default=None, type=str)
     parser.add_argument("--save_critics",           default=None, type=str)

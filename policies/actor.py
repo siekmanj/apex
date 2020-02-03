@@ -115,10 +115,11 @@ class FF_Stochastic_Actor(Actor):
       dist = torch.distributions.Normal(mu, sd)
       sample = dist.rsample()
 
-    self.action = mu if deterministic else sample
+    self.action = torch.tanh(mu) if deterministic else torch.tanh(sample)
 
     if return_log_probs:
-      return self.action, dist.log_prob(sample).sum(1, keepdim=True)
+      log_prob = dist.log_prob(sample) - torch.log((1 - torch.tanh(sample).pow(2)) + 1e-6)
+      return self.action, log_prob.sum(1, keepdim=True)
     else:
       return self.action
 

@@ -64,6 +64,8 @@ class SAC():
     q2_pi = self.q2(state, pi)
     q_pi  = torch.min(q1_pi, q2_pi)
 
+    #print(pi, log_prob)
+
     actor_loss = (self.alpha * log_prob - q_pi).mean()
 
     self.q1_optim.zero_grad()
@@ -89,6 +91,8 @@ class SAC():
     self.soft_update(self.tau)
 
     with torch.no_grad():
+      #print(actor_loss.item(), torch.mean(q1_loss + q2_loss).item(), alpha_loss.item())
+
       return actor_loss.item(), torch.mean(q1_loss + q2_loss).item(), alpha_loss.item()
 
 def run_experiment(args):
@@ -117,11 +121,11 @@ def run_experiment(args):
   act_space = env.action_space.shape[0]
 
   if args.recurrent:
-    actor = LSTM_Stochastic_Actor(obs_space, act_space, env_name=args.env_name, fixed_std=False)
+    actor = LSTM_Stochastic_Actor(obs_space, act_space, env_name=args.env_name)
     q1 = LSTM_Q(obs_space, act_space, env_name=args.env_name)
     q2 = LSTM_Q(obs_space, act_space, env_name=args.env_name)
   else:
-    actor = FF_Stochastic_Actor(obs_space, act_space, env_name=args.env_name, fixed_std=False)
+    actor = FF_Stochastic_Actor(obs_space, act_space, env_name=args.env_name)
     q1 = FF_Q(obs_space, act_space, env_name=args.env_name)
     q2 = FF_Q(obs_space, act_space, env_name=args.env_name)
 
@@ -189,17 +193,19 @@ def run_experiment(args):
         num_updates = episode_timesteps
       else:
         num_updates = 1
+      print('updating policy {} times'.format(num_updates))
       for _ in range(num_updates):
         a_loss, c_loss, alpha_loss = algo.update_policy(replay_buff, args.batch_size)#, traj_len=args.traj_len)
         episode_loss += c_loss / num_updates
         #update_steps += u_steps
 
-    if done:
+      #if done:
       episode_elapsed = (time() - episode_start)
       episode_secs_per_sample = episode_elapsed / episode_timesteps
       logger.add_scalar(args.env_name + '/episode_length', episode_timesteps, iter)
       logger.add_scalar(args.env_name + '/episode_return', episode_reward, iter)
       logger.add_scalar(args.env_name + '/critic loss', episode_loss, iter)
+      logger.add_scalar(args.env_name + '/alpha loss', alpha_loss, iter)
 
       completion = 1 - float(timesteps) / args.timesteps
       avg_sample_r = (time() - training_start)/timesteps

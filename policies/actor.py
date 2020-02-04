@@ -89,7 +89,6 @@ class FF_Stochastic_Actor(Actor):
     self.env_name = env_name
     self.nonlinearity = nonlinearity
     self.bounded = bounded
-    #self.max_action = max_action
 
     if normc_init:
       self.initialize_parameters()
@@ -219,9 +218,7 @@ class LSTM_Stochastic_Actor(Actor):
     self.action_dim = action_dim
     self.init_hidden_state()
     self.env_name = env_name
-    self.nonlinearity = nonlinearity
     self.bounded = bounded
-    
     self.is_recurrent = True
 
     if fixed_std is None:

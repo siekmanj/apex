@@ -5,8 +5,6 @@ import torch.nn.functional as F
 import numpy as np
 import random
 
-from torch.nn.utils.rnn import pad_sequence
-
 class SAC():
   def __init__(self, actor, q1, q2, target_entropy, args):
     self.actor  = actor
@@ -63,6 +61,7 @@ class SAC():
     q_pi  = torch.min(q1_pi, q2_pi)
 
     actor_loss = (self.alpha * log_prob - q_pi).mean()
+    #print('alpha: {:4.3f}, log_prob {:4.3f}, qpi {:4.3f}'.format(self.alpha.mean().item(), log_prob.mean().item(), q_pi.mean().item()))
 
     self.q1_optim.zero_grad()
     q1_loss.backward()

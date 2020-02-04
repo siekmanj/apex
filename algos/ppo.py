@@ -363,11 +363,13 @@ def run_experiment(args):
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
+    std = torch.ones(action_dim)*args.std)
+
     if args.recurrent:
-      policy = LSTM_Stochastic_Actor(obs_dim, action_dim, env_name=args.env_name, fixed_std=torch.ones(action_dim)*args.std)
+      policy = LSTM_Stochastic_Actor(obs_dim, action_dim, env_name=args.env_name, fixed_std=std, bounded=False)
       critic = LSTM_V(obs_dim)
     else:
-      policy = FF_Stochastic_Actor(obs_dim, action_dim, layers=(300,300), env_name=args.env_name, fixed_std=torch.ones(action_dim)*args.std)
+      policy = FF_Stochastic_Actor(obs_dim, action_dim, env_name=args.env_name, fixed_std=std, bounded=False)
       critic = FF_V(obs_dim)
 
     env = env_fn()

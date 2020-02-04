@@ -139,7 +139,7 @@ def run_experiment(args):
     q2 = LSTM_Q(obs_space, act_space, env_name=args.env_name)
 
     if args.algo == 'sac':
-      actor = LSTM_Stochastic_Actor(obs_space, act_space, env_name=args.env_name)
+      actor = LSTM_Stochastic_Actor(obs_space, act_space, env_name=args.env_name, bounded=True)
     else:
       actor = LSTM_Actor(obs_space, act_space, env_name=args.env_name)
   else:
@@ -147,7 +147,7 @@ def run_experiment(args):
     q2 = FF_Q(obs_space, act_space, env_name=args.env_name)
 
     if args.algo == 'sac':
-      actor = FF_Stochastic_Actor(obs_space, act_space, env_name=args.env_name)
+      actor = FF_Stochastic_Actor(obs_space, act_space, env_name=args.env_name, bounded=True)
     else:
       actor = FF_Actor(obs_space, act_space, env_name=args.env_name)
 

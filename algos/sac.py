@@ -61,7 +61,6 @@ class SAC():
     q_pi  = torch.min(q1_pi, q2_pi)
 
     actor_loss = (self.alpha * log_prob - q_pi).mean()
-    #print('alpha: {:4.3f}, log_prob {:4.3f}, qpi {:4.3f}'.format(self.alpha.mean().item(), log_prob.mean().item(), q_pi.mean().item()))
 
     self.q1_optim.zero_grad()
     q1_loss.backward()

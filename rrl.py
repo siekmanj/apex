@@ -79,6 +79,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_actor",             default=None, type=str)
     parser.add_argument("--save_critic",            default=None, type=str)
     parser.add_argument("--recurrent",              action='store_true')
+    parser.add_argument("--prenormalize_steps",     default=10000,         type=int)      
 
     parser.add_argument("--logdir",                 default="./logs/ddpg/", type=str)
 
@@ -91,13 +92,6 @@ if __name__ == "__main__":
 
   elif sys.argv[1] == 'td3':
 
-    """
-    if sys.argv[1] == 'td3':
-      recurrent = False
-    if sys.argv[1] == 'rtd3':
-      recurrent = True
-    """
-
     sys.argv.remove(sys.argv[1])
     """
       Utility for running Twin-Delayed Deep Deterministic policy gradients.
@@ -107,8 +101,6 @@ if __name__ == "__main__":
     parser.add_argument("--timesteps",       "-t",  default=1e6,   type=float)    # number of timesteps in replay buffer
     parser.add_argument("--start_timesteps",        default=1e4,   type=float)      # number of timesteps to generate random actions for
     parser.add_argument("--load_actor",             default=None,  type=str)      # load an actor from a .pt file
-    #parser.add_argument("--load_critic1",           default=None,  type=str)      # load a critic from a .pt file
-    #parser.add_argument("--load_critic2",           default=None,  type=str)      # load a critic from a .pt file
     parser.add_argument('--discount',               default=0.99,  type=float)    # the discount factor
     parser.add_argument('--expl_noise',             default=0.1,   type=float)    # random noise used for exploration
     parser.add_argument('--max_action',             default=1.0,   type=float)    # 
@@ -119,16 +111,15 @@ if __name__ == "__main__":
     parser.add_argument("--c_lr",           "-clr", default=3e-4,  type=float)    # adam learning rate for actor
     parser.add_argument("--traj_len",       "-tl",  default=1000,  type=int)      # max trajectory length for environment
     parser.add_argument("--center_reward",  "-r",   action='store_true')          # normalize rewards to a normal distribution
-    #parser.add_argument("--normc_init",             default=True,  type=bool)     # using col norm to init weights
-    #parser.add_argument("--normalize",              action='store_true')          # normalize states online
     parser.add_argument("--batch_size",             default=256,    type=int)     # batch size for policy update
     parser.add_argument("--updates",                default=1,    type=int)       # (if recurrent) number of times to update policy per episode
-    parser.add_argument("--update_freq",           default=2,    type=int)       # how many episodes to skip before updating
+    parser.add_argument("--update_freq",            default=1,    type=int)       # how many episodes to skip before updating
     parser.add_argument("--eval_every",             default=100,   type=int)      # how often to evaluate the trained policy
     parser.add_argument("--save_actor",             default=None, type=str)
-    parser.add_argument("--save_critics",           default=None, type=str)
+    #parser.add_argument("--save_critics",           default=None, type=str)
     parser.add_argument("--logdir",                 default="./logs/td3/", type=str)
     parser.add_argument("--recurrent",              action='store_true') 
+    parser.add_argument("--prenormalize_steps",     default=10000,         type=int)      
 
     parser.add_argument("--seed",     "-s",   default=0, type=int)
     parser.add_argument("--env_name", "-e",   default="Hopper-v3")
@@ -188,11 +179,12 @@ if __name__ == "__main__":
     parser.add_argument("--recurrent",              action='store_true')
 
     parser.add_argument('--discount',               default=0.99,          type=float)    # the discount factor
-    parser.add_argument('--tau',                    default=1e-3,          type=float)
+    parser.add_argument('--tau',                    default=1e-2,          type=float)
     parser.add_argument("--a_lr",           "-alr", default=1e-4,          type=float)    # adam learning rate for actor
     parser.add_argument("--c_lr",           "-clr", default=1e-4,          type=float)    # adam learning rate for critic
     parser.add_argument("--grad_clip",              default=0.05,          type=float)
     parser.add_argument("--batch_size",             default=128,            type=int)      # batch size for policy update
+    parser.add_argument("--prenormalize_steps",     default=10000,         type=int)      
 
     parser.add_argument("--save_actor",             default=None,          type=str)
     parser.add_argument("--save_critic",            default=None,          type=str)

@@ -14,7 +14,6 @@ import pickle
 
 class CassieEnv_v2:
   def __init__(self, traj='walking', simrate=60, clock=True, state_est=False, dynamics_randomization=False, no_delta=False, ik_traj=None):
-    print("CLOCK:", clock)
     self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
     self.vis = None
 

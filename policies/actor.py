@@ -102,7 +102,7 @@ class FF_Stochastic_Actor(Actor):
     mu = self.means(x)
 
     if self.learn_std:
-      sd = torch.clamp(self.log_stds(x), -20, 2).exp()
+      sd = torch.clamp(self.log_stds(x), -1, 1).exp()
     else:
       sd = self.fixed_std
 
@@ -115,10 +115,13 @@ class FF_Stochastic_Actor(Actor):
       dist = torch.distributions.Normal(mu, sd)
       sample = dist.rsample()
 
-    self.action = torch.tanh(mu) if deterministic else torch.tanh(sample)
+    #self.action = torch.tanh(mu) if deterministic else torch.tanh(sample)
+    self.action = mu if deterministic else sample
 
     if return_log_probs:
-      log_prob = dist.log_prob(sample) - torch.log((1 - torch.tanh(sample).pow(2)) + 1e-6)
+      log_prob = dist.log_prob(sample)
+      #log_prob = dist.log_prob(sample) - torch.log((1 - torch.tanh(sample).pow(2)) + 1e-6)
+      #log_prob = dist.entropy()
       return self.action, log_prob.sum(1, keepdim=True)
     else:
       return self.action
@@ -239,16 +242,18 @@ class LSTM_Stochastic_Actor(Actor):
     if dims == 3: # if we get a batch of trajectories
       self.init_hidden_state(batch_size=x.size(1))
       action = []
+      y = []
       for t, x_t in enumerate(x):
 
         for idx, layer in enumerate(self.actor_layers):
           c, h = self.cells[idx], self.hidden[idx]
           self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
           x_t = self.hidden[idx]
-        x_t = self.network_out(x_t)
-        action.append(x_t)
+        y.append(x_t)
+        #x_t = self.network_out(x_t)
 
-      x = torch.stack([a.float() for a in action])
+      #x = torch.stack([a.float() for a in action])
+      x = torch.stack([x_t for x_t in y])
 
     else:
       if dims == 1: # if we get a single timestep (if not, assume we got a batch of single timesteps)
@@ -258,13 +263,11 @@ class LSTM_Stochastic_Actor(Actor):
         h, c = self.hidden[idx], self.cells[idx]
         self.hidden[idx], self.cells[idx] = layer(x, (h, c))
         x = self.hidden[idx]
-      #x = self.nonlinearity(self.network_out(x))[0]
-      x = self.network_out(x)
 
       if dims == 1:
         x = x.view(-1)
 
-    mu = x
+    mu = self.network_out(x)
     if self.learn_std:
       sd = torch.clamp(self.log_stds(x), -20, 2).exp()
     else:
@@ -281,8 +284,9 @@ class LSTM_Stochastic_Actor(Actor):
 
     if not deterministic or return_log_probs:
       dist = torch.distributions.Normal(mu, sd)
-      sample = dist.sample()
+      sample = dist.rsample()
 
+    #self.action = torch.tanh(mu) if deterministic else torch.tanh(sample)
     self.action = mu if deterministic else sample
 
     if return_log_probs:

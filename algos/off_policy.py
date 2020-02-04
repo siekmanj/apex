@@ -4,7 +4,7 @@ from algos.sac  import SAC
 import locale, os, random, torch, time
 import numpy as np
 
-from util.env import env_factory, eval_policy
+from util.env import env_factory, eval_policy, train_normalizer
 from util.log import create_logger
 
 from torch.nn.utils.rnn import pad_sequence
@@ -46,11 +46,12 @@ class ReplayBuffer():
 
     traj_idx = np.random.randint(0, self.trajectories-1)
     start_idx = self.trajectory_idx[traj_idx]
-    end_idx = start_idx + 1
+    end_idx   = self.trajectory_idx[traj_idx+1]
+    #end_idx = start_idx + 1
 
-    while self.not_done[end_idx] == 1 and end_idx - start_idx < max_len:
-      end_idx += 1
-    end_idx += 1
+    #while self.not_done[end_idx] == 1 and end_idx - start_idx < max_len:
+    #  end_idx += 1
+    #end_idx += 1
 
     traj_states = self.state[start_idx:end_idx]
     next_states = self.next_state[start_idx:end_idx]
@@ -95,10 +96,6 @@ def collect_experience(policy, env, replay_buffer, initial_state, steps, noise=0
   with torch.no_grad():
     state = policy.normalize_state(torch.Tensor(initial_state))
 
-    #if not random_action:
-    #  a = policy.forward(torch.Tensor(state)).numpy() + np.random.normal(0, noise, size=policy.action_dim)
-    #else:
-    #  a = np.random.randn(policy.action_dim)
     if noise is None:
       a = policy.forward(state, deterministic=False).numpy()
     else:
@@ -108,7 +105,6 @@ def collect_experience(policy, env, replay_buffer, initial_state, steps, noise=0
 
     if done or steps > max_len:
       state_t1 = env.reset()
-      time.sleep(0.001)
       done = True
       if hasattr(policy, 'init_hidden_state'):
         policy.init_hidden_state()
@@ -186,9 +182,6 @@ def run_experiment(args):
   if args.save_actor is None:
     args.save_actor = os.path.join(logger.dir, 'actor.pt')
 
-  #if args.save_critic is None:
-  #  args.save_critic = os.path.join(logger.dir, 'critic.pt')
-
   # Keep track of some statistics for each episode
   training_start = time.time()
   episode_start = time.time()
@@ -196,11 +189,14 @@ def run_experiment(args):
   update_steps = 0
   best_reward = None
 
+  #eval_policy(algo.actor, min_timesteps=args.prenormalize_steps, max_traj_len=args.max_traj_len, visualize=False
+  train_normalizer(algo.actor, args.prenormalize_steps, noise=algo.expl_noise)
+
   # Fill replay buffer, update policy until n timesteps have passed
   timesteps = 0
   state = env.reset().astype(np.float32)
   while timesteps < args.timesteps:
-    buffer_ready = (algo.recurrent and iter > args.batch_size) or (not algo.recurrent and replay_buff.size > args.batch_size)
+    buffer_ready = (algo.recurrent and replay_buff.trajectories > args.batch_size) or (not algo.recurrent and replay_buff.size > args.batch_size)
     warmup = timesteps < args.start_timesteps
 
     state, r, done = collect_experience(algo.actor, env, replay_buff, state, episode_timesteps,
@@ -210,6 +206,9 @@ def run_experiment(args):
     episode_timesteps += 1
     timesteps += 1
 
+    if not buffer_ready or warmup:
+      iter = 0
+
     # Update the policy once our replay buffer is big enough
     if buffer_ready and done and not warmup:
       update_steps = 0
@@ -218,16 +217,24 @@ def run_experiment(args):
       else:
         num_updates = 1
 
+      losses = []
       for _ in range(num_updates):
-        losses = algo.update_policy(replay_buff, args.batch_size, traj_len=args.traj_len)
+        losses.append(algo.update_policy(replay_buff, args.batch_size, traj_len=args.traj_len))
 
-      #if done:
       episode_elapsed = (time.time() - episode_start)
       episode_secs_per_sample = episode_elapsed / episode_timesteps
-      #logger.add_scalar(args.env_name + '/episode_length', episode_timesteps, iter)
-      #logger.add_scalar(args.env_name + '/episode_return', episode_reward, iter)
-      #logger.add_scalar(args.env_name + '/critic loss', episode_loss, iter)
-      #logger.add_scalar(args.env_name + '/alpha loss', alpha_loss, iter)
+
+      actor_loss = np.mean([loss[0] for loss in losses])
+      critic_loss = np.mean([loss[1] for loss in losses])
+      update_steps = sum([loss[-1] for loss in losses])
+
+      logger.add_scalar(args.env_name + '/actor loss', actor_loss, timesteps - args.start_timesteps)
+      logger.add_scalar(args.env_name + '/critic loss', critic_loss, timesteps - args.start_timesteps)
+      logger.add_scalar(args.env_name + '/update steps', update_steps, timesteps - args.start_timesteps)
+
+      if args.algo == 'sac':
+        alpha_loss = np.mean([loss[2] for loss in losses])
+        logger.add_scalar(args.env_name + '/alpha loss', alpha_loss, timesteps - args.start_timesteps)
 
       completion = 1 - float(timesteps) / args.timesteps
       avg_sample_r = (time.time() - training_start)/timesteps
@@ -236,10 +243,10 @@ def run_experiment(args):
       min_remaining = int(secs_remaining - hrs_remaining*60*60)//60
 
       if iter % args.eval_every == 0 and iter != 0:
-        eval_reward = eval_policy(algo.actor, episodes=10, verbose=False, visualize=False, max_traj_len=args.traj_len)
-        logger.add_scalar(args.env_name + '/return', eval_reward, iter)
+        eval_reward = eval_policy(algo.actor, min_timesteps=1000, verbose=False, visualize=False, max_traj_len=args.traj_len)
+        logger.add_scalar(args.env_name + '/return', eval_reward, timesteps - args.start_timesteps)
 
-        print("evaluation after {:4d} episodes | return: {:7.3f} | timesteps {:9n}{:100s}".format(iter, eval_reward, timesteps, ''))
+        print("evaluation after {:4d} episodes | return: {:7.3f} | timesteps {:9n}{:100s}".format(iter, eval_reward, timesteps - args.start_timesteps, ''))
         if best_reward is None or eval_reward > best_reward:
           torch.save(algo.actor, args.save_actor)
           best_reward = eval_reward

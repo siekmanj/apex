@@ -429,9 +429,9 @@ def run_experiment(args):
           torch.save(algo.critic, args.save_critic)
 
       if logger is not None:
-        logger.add_scalar(args.env_name + '/kl', kl, itr)
-        logger.add_scalar(args.env_name + '/return', eval_reward, itr)
-        logger.add_scalar(args.env_name + '/actor_loss', a_loss, itr)
-        logger.add_scalar(args.env_name + '/critic_loss', c_loss, itr)
+        logger.add_scalar(args.env_name + '/kl', kl, timesteps)
+        logger.add_scalar(args.env_name + '/return', eval_reward, timesteps)
+        logger.add_scalar(args.env_name + '/actor loss', a_loss, timesteps)
+        logger.add_scalar(args.env_name + '/critic loss', c_loss, timesteps)
       itr += 1
     print("Finished ({} of {}).".format(timesteps, args.timesteps))

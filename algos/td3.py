@@ -78,11 +78,8 @@ class TD3():
       self.actor_optimizer.zero_grad()
       actor_loss.backward()
 
-      #if grad_clip is not None:
-      #  torch.nn.utils.clip_grad_norm_(self.actor.parameters(), grad_clip)
-
       self.actor_optimizer.step()
       
       self.soft_update(self.tau)
 
-    return critic_loss.item(), steps
+    return actor_loss.item(), critic_loss.item(), steps

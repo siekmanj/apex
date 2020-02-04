@@ -87,4 +87,4 @@ class SAC():
     self.soft_update(self.tau)
 
     with torch.no_grad():
-      return actor_loss.item(), torch.mean(q1_loss + q2_loss).item(), alpha_loss.item()
+      return actor_loss.item(), torch.mean(q1_loss + q2_loss).item(), alpha_loss.item(), steps

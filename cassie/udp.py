@@ -109,7 +109,7 @@ def run_udp(args):
   state_log  = [] # cassie state
   target_log = [] #PD target log
 
-  clock_based = env.clock_based
+  clock_based = env.clock
   no_delta = env.no_delta
 
   u = pd_in_t()

@@ -66,4 +66,4 @@ class DDPG():
     
     self.soft_update(self.tau)
 
-    return critic_loss.item(), steps
+    return actor_loss.item(), critic_loss.item(), steps

@@ -22,9 +22,14 @@ class SAC():
     self.q2_optim = torch.optim.Adam(self.q2.parameters(), lr=args.c_lr)
 
     self.target_entropy = target_entropy
-    self.log_alpha = torch.zeros(1, requires_grad=True)
-    self.alpha = self.log_alpha.exp()
-    self.alpha_optim = torch.optim.Adam([self.log_alpha], lr=args.a_lr)
+    if args.alpha is None:
+      self.log_alpha = torch.zeros(1, requires_grad=True)
+      self.alpha = self.log_alpha.exp()
+      self.alpha_optim = torch.optim.Adam([self.log_alpha], lr=args.a_lr)
+      self.tune_alpha = True
+    else:
+      self.alpha = args.alpha
+      self.tune_alpha = False
 
     self.gamma = args.discount
     self.tau = args.tau
@@ -74,15 +79,18 @@ class SAC():
     actor_loss.backward()
     self.actor_optim.step()
 
-    alpha_loss = -(self.log_alpha * (log_prob + self.target_entropy).detach()).mean()
-
-    self.alpha_optim.zero_grad()
-    alpha_loss.backward()
-    self.alpha_optim.step()
-
-    self.alpha = self.log_alpha.exp()
-    
     self.soft_update(self.tau)
 
+    if self.tune_alpha:
+      alpha_loss = -(self.log_alpha * (log_prob + self.target_entropy).detach()).mean()
+
+      self.alpha_optim.zero_grad()
+      alpha_loss.backward()
+      self.alpha_optim.step()
+
+      self.alpha = self.log_alpha.exp()
+    else:
+      alpha_loss = torch.zeros(1)
+    
     with torch.no_grad():
       return actor_loss.item(), torch.mean(q1_loss + q2_loss).item(), alpha_loss.item(), steps

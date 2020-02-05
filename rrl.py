@@ -182,8 +182,9 @@ if __name__ == "__main__":
     parser.add_argument('--tau',                    default=1e-2,          type=float)
     parser.add_argument("--a_lr",           "-alr", default=1e-4,          type=float)    # adam learning rate for actor
     parser.add_argument("--c_lr",           "-clr", default=1e-4,          type=float)    # adam learning rate for critic
+    parser.add_argument("--alpha",                  default=None,          type=float)    # adam learning rate for critic
     parser.add_argument("--grad_clip",              default=0.05,          type=float)
-    parser.add_argument("--batch_size",             default=128,            type=int)      # batch size for policy update
+    parser.add_argument("--batch_size",             default=128,           type=int)      # batch size for policy update
     parser.add_argument("--prenormalize_steps",     default=10000,         type=int)      
 
     parser.add_argument("--save_actor",             default=None,          type=str)

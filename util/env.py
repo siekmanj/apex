@@ -2,7 +2,7 @@ import time
 import torch
 import numpy as np
 
-def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=False, **kwargs):
+def env_factory(path, verbose=False, **kwargs):
     from functools import partial
 
     """
@@ -39,11 +39,12 @@ def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=Fal
       else:
         clock = False
 
-      print("Created cassie env with arguments:")
-      print("\tdynamics randomization: {}".format(dynamics_randomization))
-      print("\tstate estimation:       {}".format(state_est))
-      print("\tno delta:               {}".format(no_delta))
-      print("\tclock based:            {}".format(clock))
+      if verbose:
+        print("Created cassie env with arguments:")
+        print("\tdynamics randomization: {}".format(dynamics_randomization))
+        print("\tstate estimation:       {}".format(state_est))
+        print("\tno delta:               {}".format(no_delta))
+        print("\tclock based:            {}".format(clock))
       return partial(CassieEnv_v2, 'walking', clock=clock, state_est=state_est, no_delta=no_delta, dynamics_randomization=dynamics_randomization)
 
     import gym
@@ -73,6 +74,7 @@ def eval_policy(policy, min_timesteps=1000, max_traj_len=1000, visualize=True, e
 
     reward_sum = 0
     env.dynamics_randomization = False
+    #env.dynamics_randomization = True
     total_t = 0
     episodes = 0
     while total_t < min_timesteps:

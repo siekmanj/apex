@@ -235,9 +235,17 @@ class CassieEnv_v2:
           mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
           mass_noise = [np.random.uniform(a, b) for a, b in mass_range]
 
-          delta_y_min, delta_y_max = self.default_ipos[4] - 0.07, self.default_ipos[4] + 0.07
+          delta_y_min, delta_y_max = self.default_ipos[4] - 0.04, self.default_ipos[4] + 0.04
           delta_z_min, delta_z_max = self.default_ipos[5] - 0.04, self.default_ipos[5] + 0.04
-          com_noise = [0, 0, 0] + [np.random.uniform(-0.25, 0.06)] + [np.random.uniform(delta_y_min, delta_y_max)] + [np.random.uniform(delta_z_min, delta_z_max)] + list(self.default_ipos[6:])
+          com_noise = [0, 0, 0] + [np.random.uniform(-0.07, 0.07)] + [np.random.uniform(delta_y_min, delta_y_max)] + [np.random.uniform(delta_z_min, delta_z_max)] + list(self.default_ipos[6:])
+
+          pelvis_xfrc = np.random.uniform(-40, 40)
+          pelvis_yfrc = np.random.uniform(-5, 5)
+
+          pelvis_xtrq = np.random.uniform(-5, 5)
+          pelvis_ytrq = np.random.uniform(-1, 1)
+
+          self.sim.apply_force([pelvis_xfrc, pelvis_yfrc, 0, pelvis_xtrq, pelvis_ytrq, 0], "cassie-pelvis")
 
           fric_noise = [np.random.uniform(0.4, 1.4)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
 
@@ -251,6 +259,7 @@ class CassieEnv_v2:
           self.sim.set_body_ipos(self.default_ipos)
           self.sim.set_ground_friction(self.default_fric)
 
+          self.sim.apply_force([0, 0, 0, 0, 0, 0], 'cassie-pelvis')
 
       self.sim.set_const()
 

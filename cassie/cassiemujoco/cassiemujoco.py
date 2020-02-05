@@ -82,11 +82,11 @@ class CassieSim:
     def release(self):
         cassie_sim_release(self.c)
 
-    def apply_force(self, xfrc, body=1):
+    def apply_force(self, xfrc, body='cassie-pelvis'):
         xfrc_array = (ctypes.c_double * 6)()
         for i in range(len(xfrc)):
             xfrc_array[i] = xfrc[i]
-        cassie_sim_apply_force(self.c, xfrc_array, body)
+        cassie_sim_apply_force(self.c, xfrc_array, body.encode())
 
     def foot_force(self, force):
         frc_array = (ctypes.c_double * 12)()

@@ -180,7 +180,7 @@ class CassieEnv_v2:
       if self.dynamics_randomization:
           damp = self.default_damping
           weak_factor = 0.5
-          strong_factor = 1.5
+          strong_factor = 2.0
           pelvis_damp_range = [[damp[0], damp[0]], 
                                [damp[1], damp[1]], 
                                [damp[2], damp[2]], 
@@ -208,8 +208,8 @@ class CassieEnv_v2:
           damp_range = pelvis_damp_range + side_damp + side_damp
           damp_noise = [np.random.uniform(a, b) for a, b in damp_range]
 
-          hi = 1.3
-          lo = 0.7
+          hi = 2.0
+          lo = 0.5
           m = self.default_mass
           pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
           hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16
@@ -235,11 +235,17 @@ class CassieEnv_v2:
           mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
           mass_noise = [np.random.uniform(a, b) for a, b in mass_range]
 
-          delta_y_min, delta_y_max = self.default_ipos[4] - 0.04, self.default_ipos[4] + 0.04
-          delta_z_min, delta_z_max = self.default_ipos[5] - 0.04, self.default_ipos[5] + 0.04
-          com_noise = [0, 0, 0] + [np.random.uniform(-0.07, 0.07)] + [np.random.uniform(delta_y_min, delta_y_max)] + [np.random.uniform(delta_z_min, delta_z_max)] + list(self.default_ipos[6:])
+          delta_y_min, delta_y_max = self.default_ipos[4] - 0.03, self.default_ipos[4] + 0.03
+          delta_z_min, delta_z_max = self.default_ipos[5] - 0.01, self.default_ipos[5] + 0.01
+          com_noise = [0, 0, 0] + [np.random.uniform(-0.07, 0.07)] + [np.random.uniform(delta_y_min, delta_y_max)] + [np.random.uniform(delta_z_min, delta_z_max)]
+          
+          delta = 0.005
+          #print(self.default_ipos[6:])
+          com_noise += [np.random.uniform(val - delta, val + delta) for val in self.default_ipos[6:]]
+          #print(com_noise[6:])
+          #exit(1)
 
-          pelvis_xfrc = np.random.uniform(-40, 40)
+          pelvis_xfrc = np.random.uniform(-15, 15)
           pelvis_yfrc = np.random.uniform(-5, 5)
 
           pelvis_xtrq = np.random.uniform(-5, 5)
@@ -247,7 +253,7 @@ class CassieEnv_v2:
 
           self.sim.apply_force([pelvis_xfrc, pelvis_yfrc, 0, pelvis_xtrq, pelvis_ytrq, 0], "cassie-pelvis")
 
-          fric_noise = [np.random.uniform(0.4, 1.4)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
+          fric_noise = [np.random.uniform(0.3, 1.4)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
 
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))

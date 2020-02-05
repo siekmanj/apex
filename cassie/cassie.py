@@ -1,9 +1,6 @@
 # Consolidated Cassie environment.
-
 from .cassiemujoco import pd_in_t, state_out_t, CassieSim, CassieVis
-
 from .trajectory import CassieTrajectory
-
 from math import floor
 
 import numpy as np 
@@ -13,7 +10,7 @@ import random
 import pickle
 
 class CassieEnv_v2:
-  def __init__(self, traj='walking', simrate=60, clock=True, state_est=False, dynamics_randomization=False, no_delta=False, ik_traj=None):
+  def __init__(self, traj='walking', simrate=60, clock=True, state_est=False, dynamics_randomization=False, no_delta=False, history=0):
     self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
     self.vis = None
 
@@ -30,21 +27,22 @@ class CassieEnv_v2:
 
     speed_size     = 1
 
-    if clock:
-        if self.state_est:
-          self.observation_space = np.zeros(state_est_size + clock_size + speed_size)
-        else:
-          self.observation_space = np.zeros(mjstate_size + clock_size + speed_size)
-    else:
-        if self.state_est:
-            self.observation_space = np.zeros(state_est_size + speed_size)
-        else:
-          self.observation_space = np.zeros(mjstate_size + speed_size)
-    #else:
-    #    if self.state_est:
-    #      self.observation_space = np.zeros(state_est_size + ref_traj_size)
-    #    else:
-    #      self.observation_space = np.zeros(mjstate_size + ref_traj_size)
+    if clock: # Use clock inputs
+      if self.state_est:
+        self.observation_space = np.zeros(state_est_size + clock_size + speed_size)
+      else:
+        self.observation_space = np.zeros(mjstate_size + clock_size + speed_size)
+    else: # Use entire reference trajectory as input
+      if self.state_est:
+        self.observation_space = np.zeros(state_est_size + ref_traj_size + speed_size)
+      else:
+        self.observation_space = np.zeros(mjstate_size + ref_traj_size + speed_size)
+
+    # Adds option for state history for FF nets
+    self._obs = len(self.observation_space)
+    self.history = history
+
+    self.observation_space = self.observation_space + self.observation_space * history
 
     self.action_space = np.zeros(10)
 
@@ -139,7 +137,7 @@ class CassieEnv_v2:
 
       self.cassie_state = self.sim.step_pd(self.u)
 
-  def step(self, action, return_omniscient_state=False):
+  def step(self, action): #, return_omniscient_state=False):
       for _ in range(self.simrate):
           self.step_simulation(action)
 
@@ -157,14 +155,14 @@ class CassieEnv_v2:
 
       reward = self.compute_reward()
 
-      # TODO: make 0.3 a variable/more transparent
       if reward < 0.3:
           done = True
 
-      if return_omniscient_state:
-        return self.get_full_state(), self.get_omniscient_state(), reward, done, {}
-      else:
-        return self.get_full_state(), reward, done, {}
+      #if return_omniscient_state:
+      #  return self.get_full_state(), self.get_omniscient_state(), reward, done, {}
+      #else:
+      #  return self.get_full_state(), reward, done, {}
+      return self.get_full_state(), reward, done, {}
 
   def reset(self, return_omniscient_state=False):
       self.phase = random.randint(0, self.phaselen)
@@ -175,6 +173,8 @@ class CassieEnv_v2:
 
       self.sim.set_qpos(qpos)
       self.sim.set_qvel(qvel)
+
+      self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
 
       # Randomize dynamics:
       if self.dynamics_randomization:
@@ -240,10 +240,7 @@ class CassieEnv_v2:
           com_noise = [0, 0, 0] + [np.random.uniform(-0.07, 0.07)] + [np.random.uniform(delta_y_min, delta_y_max)] + [np.random.uniform(delta_z_min, delta_z_max)]
           
           delta = 0.005
-          #print(self.default_ipos[6:])
           com_noise += [np.random.uniform(val - delta, val + delta) for val in self.default_ipos[6:]]
-          #print(com_noise[6:])
-          #exit(1)
 
           pelvis_xfrc = np.random.uniform(-15, 15)
           pelvis_yfrc = np.random.uniform(-5, 5)
@@ -274,16 +271,17 @@ class CassieEnv_v2:
 
       #self.speed = (random.randint(0, 10)) / 10
       self.speed = np.random.uniform(-0.15, 0.8)
+
       # maybe make ref traj only send relevant idxs?
-      ref_pos, ref_vel = self.get_ref_state(self.phase)
+      #ref_pos, ref_vel = self.get_ref_state(self.phase)
 
-      actor_state  = self.get_full_state()
-      critic_state = self.get_omniscient_state()
+      #if return_omniscient_state:
+      #  critic_state = self.get_omniscient_state()
+      #  return actor_state, critic_state
+      #else:
+      #  return actor_state
 
-      if return_omniscient_state:
-        return actor_state, critic_state
-      else:
-        return actor_state
+      return self.get_full_state()
 
   # NOTE: this reward is slightly different from the one in Xie et al
   # see notes for details
@@ -308,17 +306,6 @@ class CassieEnv_v2:
           actual = qpos[j]
 
           joint_error += 30 * weight[i] * (target - actual) ** 2
-
-      """
-      # center of mass: x, y, z
-      for j in [0, 1, 2]:
-          target = ref_pos[j]
-          actual = qpos[j]
-
-          # NOTE: in Xie et al y target is 0
-
-          com_error += 10 * (target - actual) ** 2
-      """
 
       forward_diff = np.abs(qvel[0] - self.speed)
       if forward_diff < 0.05:
@@ -411,7 +398,7 @@ class CassieEnv_v2:
         ext_state = np.concatenate((clock, [self.speed]))
 
       else:
-        ext_state = [self.speed]
+        ext_state = np.concatenate([ref_pos[self.pos_idx], ref_vel[self.vel_idx],  [self.speed]])
 
       # Use state estimator
       robot_state = np.concatenate([
@@ -430,9 +417,14 @@ class CassieEnv_v2:
       ])
 
       if self.state_est:
-          return np.concatenate([robot_state, ext_state])
+          state = np.concatenate([robot_state, ext_state])
       else:
-          return np.concatenate([qpos[self.pos_index], qvel[self.vel_index], ext_state])
+          state = np.concatenate([qpos[self.pos_index], qvel[self.vel_index], ext_state])
+
+      self.state_history.insert(0, state)
+      self.state_history = self.state_history[:self.history+1]
+
+      return np.concatenate(self.state_history)
 
   def get_omniscient_state(self):
       full_state = self.get_full_state()

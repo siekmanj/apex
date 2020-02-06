@@ -208,8 +208,8 @@ class CassieEnv_v2:
           damp_range = pelvis_damp_range + side_damp + side_damp
           damp_noise = [np.random.uniform(a, b) for a, b in damp_range]
 
-          hi = 1.3
-          lo = 0.7
+          hi = 1.5
+          lo = 0.5
           m = self.default_mass
           pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
           hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16
@@ -237,10 +237,13 @@ class CassieEnv_v2:
 
           delta_y_min, delta_y_max = self.default_ipos[4] - 0.04, self.default_ipos[4] + 0.04
           delta_z_min, delta_z_max = self.default_ipos[5] - 0.04, self.default_ipos[5] + 0.04
-          com_noise = [0, 0, 0] + [np.random.uniform(-0.07, 0.07)] + [np.random.uniform(delta_y_min, delta_y_max)] + [np.random.uniform(delta_z_min, delta_z_max)] + list(self.default_ipos[6:])
+          com_noise = [0, 0, 0] + [np.random.uniform(-0.30, 0.00)] + [np.random.uniform(delta_y_min, delta_y_max)] + [np.random.uniform(delta_z_min, delta_z_max)]
 
-          pelvis_xfrc = np.random.uniform(-40, 40)
-          pelvis_yfrc = np.random.uniform(-5, 5)
+          delta = 0.005
+          com_noise += [np.random.uniform(val - delta, val + delta) for val in self.default_ipos[6:]]
+
+          pelvis_xfrc = np.random.uniform(-20, 20)
+          pelvis_yfrc = np.random.uniform(-3, 3)
 
           pelvis_xtrq = np.random.uniform(-5, 5)
           pelvis_ytrq = np.random.uniform(-1, 1)

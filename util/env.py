@@ -39,13 +39,18 @@ def env_factory(path, verbose=False, **kwargs):
       else:
         clock = False
 
+      if 'statehistory' in path or 'state_history' in path:
+        history=6
+      else:
+        history=0
+
       if verbose:
         print("Created cassie env with arguments:")
         print("\tdynamics randomization: {}".format(dynamics_randomization))
         print("\tstate estimation:       {}".format(state_est))
         print("\tno delta:               {}".format(no_delta))
         print("\tclock based:            {}".format(clock))
-      return partial(CassieEnv_v2, 'walking', clock=clock, state_est=state_est, no_delta=no_delta, dynamics_randomization=dynamics_randomization)
+      return partial(CassieEnv_v2, 'walking', clock=clock, state_est=state_est, no_delta=no_delta, dynamics_randomization=dynamics_randomization, history=history)
 
     import gym
     spec = gym.envs.registry.spec(path)

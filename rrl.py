@@ -206,7 +206,7 @@ if __name__ == "__main__":
 
     policy = torch.load(args.policy)
 
-    eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len)
+    eval_policy(policy, min_timesteps=100000, env_name=args.env_name, max_traj_len=args.traj_len)
 
   elif sys.argv[1] == 'cassie':
     sys.argv.remove(sys.argv[1])

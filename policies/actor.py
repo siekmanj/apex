@@ -278,7 +278,7 @@ class LSTM_Stochastic_Actor(Actor):
       dist = torch.distributions.Normal(mu, sd)
       sample = dist.rsample()
 
-    if self.bounded:
+    if hasattr(self, 'bounded') and self.bounded:
       self.action = torch.tanh(mu) if deterministic else torch.tanh(sample)
     else:
       self.action = mu if deterministic else sample

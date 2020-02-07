@@ -324,6 +324,10 @@ class CassieEnv_v2:
       target_q = [1, 0, 0, 0]
       orientation_error = 5 * (1 - np.inner(actual_q, target_q) ** 2)
 
+      foot_err = 6 * ((1 - np.inner(self.cassie_state.leftFoot.orientation, target_q) ** 2) + (1 - np.inner(self.cassie_state.rightFoot.orientation, target_q) ** 2))
+      #print("ferr: ", foot_err, "perr", orientation_error)
+
+
       # left and right shin springs
       for i in [15, 29]:
           target = ref_pos[i] # NOTE: in Xie et al spring target is 0
@@ -335,7 +339,7 @@ class CassieEnv_v2:
                0.200 * np.exp(-forward_diff) +      \
                0.050 * np.exp(-straight_diff) +     \
                0.200 * np.exp(-y_vel) +             \
-               0.300 * np.exp(-orientation_error) + \
+               0.300 * np.exp(-(orientation_error + foot_err)) + \
                0.050 * np.exp(-spring_error)
                #0.450 * np.exp(-com_error) +         \
 

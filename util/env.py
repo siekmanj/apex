@@ -84,6 +84,7 @@ def eval_policy(policy, min_timesteps=1000, max_traj_len=1000, visualize=True, e
     episodes = 0
     while total_t < min_timesteps:
       state = env.reset()
+      #env.speed = 0
       done = False
       timesteps = 0
       eval_reward = 0

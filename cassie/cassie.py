@@ -1,6 +1,9 @@
 # Consolidated Cassie environment.
 from .cassiemujoco import pd_in_t, state_out_t, CassieSim, CassieVis
 from .trajectory import CassieTrajectory
+
+from .udp import euler2quat, quaternion_product, inverse_quaternion, quaternion2euler
+
 from math import floor
 
 import numpy as np 
@@ -237,18 +240,20 @@ class CassieEnv_v2:
 
           delta_y_min, delta_y_max = self.default_ipos[4] - 0.03, self.default_ipos[4] + 0.03
           delta_z_min, delta_z_max = self.default_ipos[5] - 0.01, self.default_ipos[5] + 0.01
-          com_noise = [0, 0, 0] + [np.random.uniform(-0.30, 0.00)] + [np.random.uniform(delta_y_min, delta_y_max)] + [np.random.uniform(delta_z_min, delta_z_max)]
+          com_noise = [0, 0, 0] + [np.random.uniform(-0.05, 0.05)] + [np.random.uniform(delta_y_min, delta_y_max)] + [np.random.uniform(delta_z_min, delta_z_max)]
 
-          delta = 0.005
+          self.pitch_bias = np.random.uniform(-0.2, 0.2)
+          self.roll_bias  = np.random.uniform(-0.01, 0.01)
+
+          delta = 0.0005
           com_noise += [np.random.uniform(val - delta, val + delta) for val in self.default_ipos[6:]]
 
-          pelvis_xfrc = np.random.uniform(-15, 15)
-          pelvis_yfrc = np.random.uniform(-5, 5)
+          #pelvis_xfrc = np.random.uniform(-10, 10)
+          #pelvis_yfrc = np.random.uniform(-5, 5)
 
-          pelvis_xtrq = np.random.uniform(-3, 3)
-          pelvis_ytrq = np.random.uniform(-1, 1)
-
-          self.sim.apply_force([pelvis_xfrc, pelvis_yfrc, 0, pelvis_xtrq, pelvis_ytrq, 0], "cassie-pelvis")
+          #pelvis_xtrq = np.random.uniform(-3, 3)
+          #pelvis_ytrq = np.random.uniform(-1, 1)
+          #self.sim.apply_force([pelvis_xfrc, pelvis_yfrc, 0, pelvis_xtrq, pelvis_ytrq, 0], "cassie-pelvis")
 
           fric_noise = [np.random.uniform(0.3, 1.4)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
 
@@ -262,7 +267,10 @@ class CassieEnv_v2:
           self.sim.set_body_ipos(self.default_ipos)
           self.sim.set_ground_friction(self.default_fric)
 
-          self.sim.apply_force([0, 0, 0, 0, 0, 0], 'cassie-pelvis')
+          self.pitch_bias = 0.0
+          self.roll_bias = 0.0
+
+          #self.sim.apply_force([0, 0, 0, 0, 0, 0], 'cassie-pelvis')
 
       self.sim.set_const()
 
@@ -404,10 +412,13 @@ class CassieEnv_v2:
       else:
         ext_state = np.concatenate([ref_pos[self.pos_idx], ref_vel[self.vel_idx],  [self.speed]])
 
+      pelvis_xyz = quaternion2euler(self.cassie_state.pelvis.orientation) + [self.roll_bias, self.pitch_bias, 0]
+      pelvis_quat = euler2quat(z=pelvis_xyz[2], y=pelvis_xyz[1], x=pelvis_xyz[0])
+
       # Use state estimator
       robot_state = np.concatenate([
           [self.cassie_state.pelvis.position[2] - self.cassie_state.terrain.height], # pelvis height
-          self.cassie_state.pelvis.orientation[:],                                 # pelvis orientation
+          pelvis_quat[:],
           self.cassie_state.motor.position[:],                                     # actuated joint positions
 
           self.cassie_state.pelvis.translationalVelocity[:],                       # pelvis translational velocity

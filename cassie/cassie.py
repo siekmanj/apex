@@ -238,15 +238,15 @@ class CassieEnv_v2:
           mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
           mass_noise = [np.random.uniform(a, b) for a, b in mass_range]
 
-          delta_y_min, delta_y_max = self.default_ipos[4] - 0.03, self.default_ipos[4] + 0.03
-          delta_z_min, delta_z_max = self.default_ipos[5] - 0.01, self.default_ipos[5] + 0.01
-          com_noise = [0, 0, 0] + [np.random.uniform(-0.05, 0.05)] + [np.random.uniform(delta_y_min, delta_y_max)] + [np.random.uniform(delta_z_min, delta_z_max)]
+          #delta_y_min, delta_y_max = self.default_ipos[4] - 0.03, self.default_ipos[4] + 0.03
+          #delta_z_min, delta_z_max = self.default_ipos[5] - 0.01, self.default_ipos[5] + 0.01
+          #com_noise = [0, 0, 0] + [np.random.uniform(-0.05, 0.05)] + [np.random.uniform(delta_y_min, delta_y_max)] + [np.random.uniform(delta_z_min, delta_z_max)]
 
-          self.pitch_bias = np.random.uniform(-0.2, 0.2)
+          self.pitch_bias = np.random.uniform(-0.15, 0.15)
           self.roll_bias  = np.random.uniform(-0.01, 0.01)
 
-          delta = 0.0005
-          com_noise += [np.random.uniform(val - delta, val + delta) for val in self.default_ipos[6:]]
+          #delta = 0.0005
+          #com_noise += [np.random.uniform(val - delta, val + delta) for val in self.default_ipos[6:]]
 
           #pelvis_xfrc = np.random.uniform(-10, 10)
           #pelvis_yfrc = np.random.uniform(-5, 5)
@@ -259,7 +259,7 @@ class CassieEnv_v2:
 
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))
-          self.sim.set_body_ipos(com_noise)
+          #self.sim.set_body_ipos(com_noise)
           self.sim.set_ground_friction(np.clip(fric_noise, 0, None))
       else:
           self.sim.set_dof_damping(self.default_damping)

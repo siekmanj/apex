@@ -1,8 +1,8 @@
 # Consolidated Cassie environment.
-
 from .cassiemujoco import pd_in_t, state_out_t, CassieSim, CassieVis
-
 from .trajectory import CassieTrajectory
+
+from .udp import euler2quat, quaternion_product, inverse_quaternion, quaternion2euler
 
 from math import floor
 
@@ -13,8 +13,7 @@ import random
 import pickle
 
 class CassieEnv_v2:
-  def __init__(self, traj='walking', simrate=60, clock=True, state_est=False, dynamics_randomization=False, no_delta=False, ik_traj=None):
-    print("CLOCK:", clock)
+  def __init__(self, traj='walking', simrate=60, clock=True, state_est=False, dynamics_randomization=False, no_delta=False, history=0):
     self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
     self.vis = None
 
@@ -31,21 +30,22 @@ class CassieEnv_v2:
 
     speed_size     = 1
 
-    if clock:
-        if self.state_est:
-          self.observation_space = np.zeros(state_est_size + clock_size + speed_size)
-        else:
-          self.observation_space = np.zeros(mjstate_size + clock_size + speed_size)
-    else:
-        if self.state_est:
-            self.observation_space = np.zeros(state_est_size + speed_size)
-        else:
-          self.observation_space = np.zeros(mjstate_size + speed_size)
-    #else:
-    #    if self.state_est:
-    #      self.observation_space = np.zeros(state_est_size + ref_traj_size)
-    #    else:
-    #      self.observation_space = np.zeros(mjstate_size + ref_traj_size)
+    if clock: # Use clock inputs
+      if self.state_est:
+        self.observation_space = np.zeros(state_est_size + clock_size + speed_size)
+      else:
+        self.observation_space = np.zeros(mjstate_size + clock_size + speed_size)
+    else: # Use entire reference trajectory as input
+      if self.state_est:
+        self.observation_space = np.zeros(state_est_size + ref_traj_size + speed_size)
+      else:
+        self.observation_space = np.zeros(mjstate_size + ref_traj_size + speed_size)
+
+    # Adds option for state history for FF nets
+    self._obs = len(self.observation_space)
+    self.history = history
+
+    self.observation_space = np.zeros(self._obs + self._obs * self.history)
 
     self.action_space = np.zeros(10)
 
@@ -140,7 +140,7 @@ class CassieEnv_v2:
 
       self.cassie_state = self.sim.step_pd(self.u)
 
-  def step(self, action, return_omniscient_state=False):
+  def step(self, action): #, return_omniscient_state=False):
       for _ in range(self.simrate):
           self.step_simulation(action)
 
@@ -158,16 +158,16 @@ class CassieEnv_v2:
 
       reward = self.compute_reward()
 
-      # TODO: make 0.3 a variable/more transparent
       if reward < 0.3:
           done = True
 
-      if return_omniscient_state:
-        return self.get_full_state(), self.get_omniscient_state(), reward, done, {}
-      else:
-        return self.get_full_state(), reward, done, {}
+      #if return_omniscient_state:
+      #  return self.get_full_state(), self.get_omniscient_state(), reward, done, {}
+      #else:
+      #  return self.get_full_state(), reward, done, {}
+      return self.get_full_state(), reward, done, {}
 
-  def reset(self, return_omniscient_state=False):
+  def reset(self):
       self.phase = random.randint(0, self.phaselen)
       self.time = 0
       self.counter = 0
@@ -177,11 +177,13 @@ class CassieEnv_v2:
       self.sim.set_qpos(qpos)
       self.sim.set_qvel(qvel)
 
+      self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
+
       # Randomize dynamics:
       if self.dynamics_randomization:
           damp = self.default_damping
           weak_factor = 0.5
-          strong_factor = 1.5
+          strong_factor = 2.0
           pelvis_damp_range = [[damp[0], damp[0]], 
                                [damp[1], damp[1]], 
                                [damp[2], damp[2]], 
@@ -209,8 +211,8 @@ class CassieEnv_v2:
           damp_range = pelvis_damp_range + side_damp + side_damp
           damp_noise = [np.random.uniform(a, b) for a, b in damp_range]
 
-          hi = 1.3
-          lo = 0.7
+          hi = 1.5
+          lo = 0.5
           m = self.default_mass
           pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
           hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16
@@ -236,15 +238,28 @@ class CassieEnv_v2:
           mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
           mass_noise = [np.random.uniform(a, b) for a, b in mass_range]
 
-          delta_y_min, delta_y_max = self.default_ipos[4] - 0.07, self.default_ipos[4] + 0.07
-          delta_z_min, delta_z_max = self.default_ipos[5] - 0.04, self.default_ipos[5] + 0.04
-          com_noise = [0, 0, 0] + [np.random.uniform(-0.25, 0.06)] + [np.random.uniform(delta_y_min, delta_y_max)] + [np.random.uniform(delta_z_min, delta_z_max)] + list(self.default_ipos[6:])
+          #delta_y_min, delta_y_max = self.default_ipos[4] - 0.03, self.default_ipos[4] + 0.03
+          #delta_z_min, delta_z_max = self.default_ipos[5] - 0.01, self.default_ipos[5] + 0.01
+          #com_noise = [0, 0, 0] + [np.random.uniform(-0.05, 0.05)] + [np.random.uniform(delta_y_min, delta_y_max)] + [np.random.uniform(delta_z_min, delta_z_max)]
 
-          fric_noise = [np.random.uniform(0.4, 1.4)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
+          self.pitch_bias = np.random.uniform(-0.15, 0.15)
+          self.roll_bias  = np.random.uniform(-0.01, 0.01)
+
+          #delta = 0.0005
+          #com_noise += [np.random.uniform(val - delta, val + delta) for val in self.default_ipos[6:]]
+
+          #pelvis_xfrc = np.random.uniform(-10, 10)
+          #pelvis_yfrc = np.random.uniform(-5, 5)
+
+          #pelvis_xtrq = np.random.uniform(-3, 3)
+          #pelvis_ytrq = np.random.uniform(-1, 1)
+          #self.sim.apply_force([pelvis_xfrc, pelvis_yfrc, 0, pelvis_xtrq, pelvis_ytrq, 0], "cassie-pelvis")
+
+          fric_noise = [np.random.uniform(0.3, 1.4)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
 
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))
-          self.sim.set_body_ipos(com_noise)
+          #self.sim.set_body_ipos(com_noise)
           self.sim.set_ground_friction(np.clip(fric_noise, 0, None))
       else:
           self.sim.set_dof_damping(self.default_damping)
@@ -252,6 +267,10 @@ class CassieEnv_v2:
           self.sim.set_body_ipos(self.default_ipos)
           self.sim.set_ground_friction(self.default_fric)
 
+          self.pitch_bias = 0.0
+          self.roll_bias = 0.0
+
+          #self.sim.apply_force([0, 0, 0, 0, 0, 0], 'cassie-pelvis')
 
       self.sim.set_const()
 
@@ -260,16 +279,17 @@ class CassieEnv_v2:
 
       #self.speed = (random.randint(0, 10)) / 10
       self.speed = np.random.uniform(-0.15, 0.8)
+
       # maybe make ref traj only send relevant idxs?
-      ref_pos, ref_vel = self.get_ref_state(self.phase)
+      #ref_pos, ref_vel = self.get_ref_state(self.phase)
 
-      actor_state  = self.get_full_state()
-      critic_state = self.get_omniscient_state()
+      #if return_omniscient_state:
+      #  critic_state = self.get_omniscient_state()
+      #  return actor_state, critic_state
+      #else:
+      #  return actor_state
 
-      if return_omniscient_state:
-        return actor_state, critic_state
-      else:
-        return actor_state
+      return self.get_full_state()
 
   # NOTE: this reward is slightly different from the one in Xie et al
   # see notes for details
@@ -295,17 +315,6 @@ class CassieEnv_v2:
 
           joint_error += 30 * weight[i] * (target - actual) ** 2
 
-      """
-      # center of mass: x, y, z
-      for j in [0, 1, 2]:
-          target = ref_pos[j]
-          actual = qpos[j]
-
-          # NOTE: in Xie et al y target is 0
-
-          com_error += 10 * (target - actual) ** 2
-      """
-
       forward_diff = np.abs(qvel[0] - self.speed)
       if forward_diff < 0.05:
          forward_diff = 0
@@ -323,6 +332,10 @@ class CassieEnv_v2:
       target_q = [1, 0, 0, 0]
       orientation_error = 5 * (1 - np.inner(actual_q, target_q) ** 2)
 
+      foot_err = 6 * ((1 - np.inner(self.cassie_state.leftFoot.orientation, target_q) ** 2) + (1 - np.inner(self.cassie_state.rightFoot.orientation, target_q) ** 2))
+      #print("ferr: ", foot_err, "perr", orientation_error)
+
+
       # left and right shin springs
       for i in [15, 29]:
           target = ref_pos[i] # NOTE: in Xie et al spring target is 0
@@ -334,7 +347,7 @@ class CassieEnv_v2:
                0.200 * np.exp(-forward_diff) +      \
                0.050 * np.exp(-straight_diff) +     \
                0.200 * np.exp(-y_vel) +             \
-               0.300 * np.exp(-orientation_error) + \
+               0.300 * np.exp(-(orientation_error + foot_err)) + \
                0.050 * np.exp(-spring_error)
                #0.450 * np.exp(-com_error) +         \
 
@@ -397,12 +410,15 @@ class CassieEnv_v2:
         ext_state = np.concatenate((clock, [self.speed]))
 
       else:
-        ext_state = [self.speed]
+        ext_state = np.concatenate([ref_pos[self.pos_idx], ref_vel[self.vel_idx],  [self.speed]])
+
+      pelvis_xyz = quaternion2euler(self.cassie_state.pelvis.orientation) + [self.roll_bias, self.pitch_bias, 0]
+      pelvis_quat = euler2quat(z=pelvis_xyz[2], y=pelvis_xyz[1], x=pelvis_xyz[0])
 
       # Use state estimator
       robot_state = np.concatenate([
           [self.cassie_state.pelvis.position[2] - self.cassie_state.terrain.height], # pelvis height
-          self.cassie_state.pelvis.orientation[:],                                 # pelvis orientation
+          pelvis_quat[:],
           self.cassie_state.motor.position[:],                                     # actuated joint positions
 
           self.cassie_state.pelvis.translationalVelocity[:],                       # pelvis translational velocity
@@ -416,9 +432,14 @@ class CassieEnv_v2:
       ])
 
       if self.state_est:
-          return np.concatenate([robot_state, ext_state])
+          state = np.concatenate([robot_state, ext_state])
       else:
-          return np.concatenate([qpos[self.pos_index], qvel[self.vel_index], ext_state])
+          state = np.concatenate([qpos[self.pos_index], qvel[self.vel_index], ext_state])
+
+      self.state_history.insert(0, state)
+      self.state_history = self.state_history[:self.history+1]
+
+      return np.concatenate(self.state_history)
 
   def get_omniscient_state(self):
       full_state = self.get_full_state()

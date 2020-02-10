@@ -363,11 +363,13 @@ def run_experiment(args):
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
+    std = torch.ones(action_dim)*args.std
+
     if args.recurrent:
-      policy = LSTM_Stochastic_Actor(obs_dim, action_dim, env_name=args.env_name, fixed_std=torch.ones(action_dim)*args.std)
+      policy = LSTM_Stochastic_Actor(obs_dim, action_dim, env_name=args.env_name, fixed_std=std, bounded=False)
       critic = LSTM_V(obs_dim)
     else:
-      policy = FF_Stochastic_Actor(obs_dim, action_dim, layers=(300,300), env_name=args.env_name, fixed_std=torch.ones(action_dim)*args.std)
+      policy = FF_Stochastic_Actor(obs_dim, action_dim, env_name=args.env_name, fixed_std=std, bounded=False)
       critic = FF_V(obs_dim)
 
     env = env_fn()
@@ -429,9 +431,9 @@ def run_experiment(args):
           torch.save(algo.critic, args.save_critic)
 
       if logger is not None:
-        logger.add_scalar(args.env_name + '/kl', kl, itr)
-        logger.add_scalar(args.env_name + '/return', eval_reward, itr)
-        logger.add_scalar(args.env_name + '/actor_loss', a_loss, itr)
-        logger.add_scalar(args.env_name + '/critic_loss', c_loss, itr)
+        logger.add_scalar(args.env_name + '/kl', kl, timesteps)
+        logger.add_scalar(args.env_name + '/return', eval_reward, timesteps)
+        logger.add_scalar(args.env_name + '/actor loss', a_loss, timesteps)
+        logger.add_scalar(args.env_name + '/critic loss', c_loss, timesteps)
       itr += 1
     print("Finished ({} of {}).".format(timesteps, args.timesteps))

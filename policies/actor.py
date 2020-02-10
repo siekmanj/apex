@@ -38,7 +38,7 @@ class Linear_Actor(Actor):
     return self.action
 
 class FF_Actor(Actor):
-  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name='NOT SET', nonlinearity=F.relu, normc_init=False, max_action=1):
+  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name=None, nonlinearity=F.relu, normc_init=False, max_action=1):
     super(FF_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -68,7 +68,7 @@ class FF_Actor(Actor):
     return self.action
 
 class FF_Stochastic_Actor(Actor):
-  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name=None, nonlinearity=F.relu, normc_init=False, max_action=1, fixed_std=None):
+  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name=None, nonlinearity=F.relu, normc_init=True, bounded=False, fixed_std=None):
     super(FF_Stochastic_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -88,21 +88,20 @@ class FF_Stochastic_Actor(Actor):
     self.action_dim = action_dim
     self.env_name = env_name
     self.nonlinearity = nonlinearity
-    self.max_action = max_action
+    self.bounded = bounded
 
     if normc_init:
       self.initialize_parameters()
 
   def _get_dist_params(self, state):
-
     x = state
     for idx, layer in enumerate(self.actor_layers):
       x = self.nonlinearity(layer(x))
 
-    mu = torch.tanh(self.means(x))
+    mu = self.means(x)
 
     if self.learn_std:
-      sd = torch.clamp(self.log_stds(x), -20, 2).exp()
+      sd = torch.clamp(self.log_stds(x), -2, 1).exp()
     else:
       sd = self.fixed_std
 
@@ -113,12 +112,19 @@ class FF_Stochastic_Actor(Actor):
 
     if not deterministic or return_log_probs:
       dist = torch.distributions.Normal(mu, sd)
-      sample = dist.sample()
+      sample = dist.rsample()
 
-    self.action = mu if deterministic else sample
+    if self.bounded:
+      self.action = torch.tanh(mu) if deterministic else torch.tanh(sample)
+    else:
+      self.action = mu if deterministic else sample
 
     if return_log_probs:
-      return self.action, dist.log_prob(sample)
+      log_prob = dist.log_prob(sample)
+      if self.bounded:
+        log_prob -= torch.log((1 - torch.tanh(sample).pow(2)) + 1e-6)
+
+      return self.action, log_prob.sum(1, keepdim=True)
     else:
       return self.action
 
@@ -130,7 +136,7 @@ class FF_Stochastic_Actor(Actor):
     return self.action
 
 class LSTM_Actor(Actor):
-  def __init__(self, input_dim, action_dim, layers=(128, 128), env_name='NOT SET', nonlinearity=torch.tanh, normc_init=False, max_action=1):
+  def __init__(self, input_dim, action_dim, layers=(128, 128), env_name=None, nonlinearity=torch.tanh, normc_init=False, bounded=False):
     super(LSTM_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -144,7 +150,7 @@ class LSTM_Actor(Actor):
     self.init_hidden_state()
     self.env_name = env_name
     self.nonlinearity = nonlinearity
-    self.max_action = max_action
+    self.bounded = bounded
     
     self.is_recurrent = True
 
@@ -170,18 +176,14 @@ class LSTM_Actor(Actor):
 
     if dims == 3: # if we get a batch of trajectories
       self.init_hidden_state(batch_size=x.size(1))
-      action = []
+      y = []
       for t, x_t in enumerate(x):
-
         for idx, layer in enumerate(self.actor_layers):
           c, h = self.cells[idx], self.hidden[idx]
           self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
           x_t = self.hidden[idx]
-        x_t = self.nonlinearity(self.network_out(x_t))
-        action.append(x_t)
-
-      x = torch.stack([a.float() for a in action])
-      self.action = x
+        y.append(x_t)
+      x = torch.stack([x_t for x_t in y])
 
     else:
       if dims == 1: # if we get a single timestep (if not, assume we got a batch of single timesteps)
@@ -195,15 +197,15 @@ class LSTM_Actor(Actor):
 
       if dims == 1:
         x = x.view(-1)
-      self.action = x
 
-    return x
+    self.action = self.network_out(x)
+    return self.action
   
   def get_action(self):
     return self.action
 
 class LSTM_Stochastic_Actor(Actor):
-  def __init__(self, state_dim, action_dim, layers=(128, 128), env_name=None, nonlinearity=F.tanh, normc_init=False, max_action=1, fixed_std=None):
+  def __init__(self, state_dim, action_dim, layers=(128, 128), env_name=None, normc_init=False, bounded=False, fixed_std=None):
     super(LSTM_Stochastic_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -216,9 +218,7 @@ class LSTM_Stochastic_Actor(Actor):
     self.action_dim = action_dim
     self.init_hidden_state()
     self.env_name = env_name
-    self.nonlinearity = nonlinearity
-    self.max_action = max_action
-    
+    self.bounded = bounded
     self.is_recurrent = True
 
     if fixed_std is None:
@@ -238,16 +238,14 @@ class LSTM_Stochastic_Actor(Actor):
     if dims == 3: # if we get a batch of trajectories
       self.init_hidden_state(batch_size=x.size(1))
       action = []
+      y = []
       for t, x_t in enumerate(x):
-
         for idx, layer in enumerate(self.actor_layers):
           c, h = self.cells[idx], self.hidden[idx]
           self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
           x_t = self.hidden[idx]
-        x_t = self.network_out(x_t)
-        action.append(x_t)
-
-      x = torch.stack([a.float() for a in action])
+        y.append(x_t)
+      x = torch.stack([x_t for x_t in y])
 
     else:
       if dims == 1: # if we get a single timestep (if not, assume we got a batch of single timesteps)
@@ -257,15 +255,13 @@ class LSTM_Stochastic_Actor(Actor):
         h, c = self.hidden[idx], self.cells[idx]
         self.hidden[idx], self.cells[idx] = layer(x, (h, c))
         x = self.hidden[idx]
-      #x = self.nonlinearity(self.network_out(x))[0]
-      x = self.network_out(x)
 
       if dims == 1:
         x = x.view(-1)
 
-    mu = x
+    mu = self.network_out(x)
     if self.learn_std:
-      sd = torch.clamp(self.log_stds(x), -20, 2).exp()
+      sd = torch.clamp(self.log_stds(x), -2, 2).exp()
     else:
       sd = self.fixed_std
 
@@ -280,9 +276,12 @@ class LSTM_Stochastic_Actor(Actor):
 
     if not deterministic or return_log_probs:
       dist = torch.distributions.Normal(mu, sd)
-      sample = dist.sample()
+      sample = dist.rsample()
 
-    self.action = mu if deterministic else sample
+    if hasattr(self, 'bounded') and self.bounded:
+      self.action = torch.tanh(mu) if deterministic else torch.tanh(sample)
+    else:
+      self.action = mu if deterministic else sample
 
     if return_log_probs:
       return self.action, dist.log_prob(sample)

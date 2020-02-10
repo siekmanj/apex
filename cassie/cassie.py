@@ -45,7 +45,7 @@ class CassieEnv_v2:
     self._obs = len(self.observation_space)
     self.history = history
 
-    self.observation_space = self.observation_space + self.observation_space * history
+    self.observation_space = np.zeros(self._obs + self._obs * self.history)
 
     self.action_space = np.zeros(10)
 
@@ -167,7 +167,7 @@ class CassieEnv_v2:
       #  return self.get_full_state(), reward, done, {}
       return self.get_full_state(), reward, done, {}
 
-  def reset(self, return_omniscient_state=False):
+  def reset(self):
       self.phase = random.randint(0, self.phaselen)
       self.time = 0
       self.counter = 0

@@ -5,23 +5,14 @@ import hashlib
 from collections import OrderedDict
 
 from util.env import env_factory, eval_policy
-
-class color:
- BOLD   = '\033[1m\033[48m'
- END    = '\033[0m'
- ORANGE = '\033[38;5;202m'
- BLACK  = '\033[38;5;240m'
-
-
-def print_logo(subtitle="", option=2):
-  pass
+from util.logo import print_logo
 
 if __name__ == "__main__":
   import sys, argparse, time, os
   parser = argparse.ArgumentParser()
   parser.add_argument("--nolog",      action='store_true')
 
-  print_logo(subtitle="Maintained by Oregon State University's Dynamic Robotics Lab")
+  print_logo(subtitle="Recurrent Reinforcement Learning for Robotics.")
 
   if len(sys.argv) < 2:
     print("Usage: python apex.py [algorithm name]", sys.argv)
@@ -217,4 +208,4 @@ if __name__ == "__main__":
 
     run_udp(args)
   else:
-    print("Invalid algorithm '{}'".format(sys.argv[1]))
+    print("Invalid option '{}'".format(sys.argv[1]))

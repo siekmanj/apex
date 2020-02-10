@@ -38,7 +38,7 @@ class Linear_Actor(Actor):
     return self.action
 
 class FF_Actor(Actor):
-  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name='NOT SET', nonlinearity=F.relu, normc_init=False, max_action=1):
+  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name=None, nonlinearity=F.relu, normc_init=False, max_action=1):
     super(FF_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -136,7 +136,7 @@ class FF_Stochastic_Actor(Actor):
     return self.action
 
 class LSTM_Actor(Actor):
-  def __init__(self, input_dim, action_dim, layers=(128, 128), env_name='NOT SET', nonlinearity=torch.tanh, normc_init=False, bounded=False):
+  def __init__(self, input_dim, action_dim, layers=(128, 128), env_name=None, nonlinearity=torch.tanh, normc_init=False, bounded=False):
     super(LSTM_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
